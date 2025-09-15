@@ -1,0 +1,160 @@
+---
+title: "node-addon-api vs Node-API"
+description: "Contrast the C++-centric node-addon-api with the lower-level Node-API (N-API), highlighting why and how node-addon-api streamlines addon development with modern C++ abstractions and exception handling."
+---
+
+# node-addon-api vs Node-API
+
+Native Node.js addons can be built using either the **Node-API** (N-API) directly or with the higher-level **node-addon-api** C++ wrapper. Understanding the distinction between these two options enables addon developers to choose the best approach for their goals, unlocking more productivity and improved maintainability.
+
+---
+
+## What Are Node-API and node-addon-api?
+
+- **Node-API (N-API):**
+  - A C-based, ABI-stable API provided by Node.js itself.
+  - Offers a stable foundation for building native addons compatible across various Node.js versions.
+  - Exposes a procedural C API that handles JavaScript interoperability, lifecycle, and threading.
+  - Requires explicit management of handles, scopes, and error-checking in detail.
+
+- **node-addon-api:**
+  - A header-only C++ wrapper around Node-API.
+  - Provides an idiomatic C++ object model, including classes and exceptions.
+  - Wraps low-level C calls into modern C++ abstractions.
+  - Simplifies addon development by managing boilerplate, error handling, and lifetimes automatically.
+  - Not part of Node.js core but widely adopted.
+
+<Check>
+When you want direct control and minimal abstraction, Node-API is your core interface. For faster development with modern C++ features, node-addon-api is the recommended choice.
+</Check>
+
+---
+
+## Why Use node-addon-api Instead of Node-API?
+
+Imagine building a house with raw bricks (Node-API) vs. having a modular prefabricated system (node-addon-api): both end with a sturdy house, but the latter requires less manual work and fewer error-prone tasks.
+
+### Streamlined C++ Development
+- **Object-Oriented Model:** Classes such as `Napi::Object`, `Napi::Function`, and `Napi::Env` provide natural C++ abstractions over JavaScript constructs.
+- **Exception Handling:** Seamless integration of C++ exceptions with JavaScript exceptions enables writing clean try/catch blocks rather than manual error checks.
+- **Reduced Boilerplate:** Automatic scope and lifetime management minimizes explicit handle management, reducing the risk of memory leaks and dangling pointers.
+
+### Enhanced Productivity and Safety
+- Focus on writing logical native code rather than repetitive API calls.
+- Use modern C++ features like RAII (Resource Acquisition Is Initialization) for predictable resource management.
+- Consistent exception propagation with options to enable or disable C++ exception integration based on project needs.
+
+---
+
+## Key Differences at a Glance
+
+| Aspect                         | Node-API (N-API)                                  | node-addon-api                                                  |
+|--------------------------------|--------------------------------------------------|----------------------------------------------------------------|
+| Language Interface             | C procedural                                      | C++ object-oriented wrapper                                   |
+| Error Handling                 | Status return codes, manual checks                | Optional C++ exceptions wrapping JavaScript exceptions       |
+| API Complexity                | Manual handle & scope management                   | Automatic handle scopes and lifetime management               |
+| Exception Integration         | None (errors must be manually checked and handled) | Seamless mapping between C++ exceptions (`Napi::Error`) and JS exceptions |
+| Boilerplate                  | Higher due to manual resource management            | Reduced through RAII and higher abstractions                   |
+| ABI Stability                 | Guaranteed by Node.js                              | Leverages Node-API for ABI stability                            |
+| Usage Complexity              | Lower-level, steep learning curve                  | Easier for C++ developers with modern advantages               |
+
+---
+
+## How node-addon-api Simplifies Addon Development
+
+To illustrate the value of node-addon-api, consider the following common tasks and how each approach differs.
+
+### Example: Throwing and Propagating Exceptions
+
+**Using Node-API (C style):**
+
+You must check every function call’s return status, manually create and return errors to JavaScript, and track scopes manually.
+
+**Using node-addon-api (C++ style):**
+
+```cpp
+Napi::Env env = info.Env();
+
+if (invalid_condition) {
+  throw Napi::Error::New(env, "Invalid input provided");
+}
+
+// Function continues normally
+```
+
+Here, `throw` effectively creates a JavaScript exception, optionally integrates with C++ exceptions, and manages the exception lifecycle behind the scenes.
+
+### Example: Creating Objects and Returning Values
+
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+obj.Set("key", Napi::String::New(env, "value"));
+return obj;
+```
+
+Without node-addon-api, you'd use lower-level functions and manually manage the handles, increasing complexity and risk.
+
+### Example: Cleanup and Memory Management
+
+RAII-based scopes and destructors in node-addon-api automate cleanup, where Node-API requires explicit `napi_handle_scope_open` and `napi_handle_scope_close` calls.
+
+---
+
+## When Might You Choose Node-API Directly?
+
+- Extremely minimal dependency footprint is critical.
+- You need very fine-grained control and are comfortable with C and Node.js internal API details.
+- You are porting or integrating legacy C code where C++ wrappers add complexity.
+
+However, bear in mind these benefits come with more verbose code and higher possibility of subtle bugs.
+
+---
+
+## Best Practices for Using node-addon-api
+
+1. **Enable C++ Exception Handling When Possible**
+   - Use the corresponding build dependencies (`node_addon_api_except` or `node_addon_api_except_all`) to enable full C++ exception support.
+   - This dramatically simplifies error flow and reduces manual error checks.
+
+2. **Include Only `napi.h`**
+   - Avoid `node.h`, `nan.h`, or `v8.h` to maintain ABI stability and clean abstraction.
+
+3. **Use the Provided Macros for Error Propagation**
+   - E.g., `NAPI_THROW_IF_FAILED` simplifies error checking.
+
+4. **Leverage RAII and Scoped Handles**
+   - Avoid manual handle or scope management; let node-addon-api resources handle this.
+
+5. **Consult Setup and Integration Docs**
+   - Proper `binding.gyp` setup and compiler flags ensure exception handling works correctly across platforms.
+
+---
+
+## Troubleshooting Common Issues
+
+- **Exception Handling Not Working:** Verify that you have selected the correct `node-addon-api` build dependency in your `binding.gyp` to enable exception support.
+
+- **Memory Leaks or Crashes:** Ensure that you do not mix Node-API handles and raw pointers improperly; follow lifecycle conventions laid out by node-addon-api.
+
+- **Build Failures on macOS:** Confirm that `-fvisibility=hidden` and related flags are set as per setup guidance.
+
+- **Using Deprecated APIs:** Define `NODE_ADDON_API_DISABLE_DEPRECATED` to avoid deprecated behaviors.
+
+---
+
+## Summary
+
+node-addon-api wraps the stable Node-API C interface with a modern, powerful C++ object model. It significantly reduces boilerplate, improves error handling through exceptions, and streamlines addon development. While Node-API provides the essential ABI-stable building blocks, node-addon-api lets developers focus on writing native code efficiently and safely.
+
+---
+
+## Additional Resources
+
+- [Setup Instructions](../../getting-started/setup-basics/install-instructions)
+- [Error Handling Guide](../../guides/advanced-best-practices/error-handling)
+- [Node-API Official Documentation](https://nodejs.org/dist/latest/docs/api/n-api.html)
+- [node-addon-api GitHub Repository](https://github.com/nodejs/node-addon-api)
+
+---
+
+_This page belongs to the Concepts section under Architecture Overview and complements related topics such as the C++ Object Model, Exception Handling, and Memory Management._
