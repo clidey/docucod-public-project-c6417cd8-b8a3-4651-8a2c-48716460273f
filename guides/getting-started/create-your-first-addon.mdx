@@ -1,0 +1,215 @@
+---
+title: "Create Your First Addon"
+description: "A hands-on guide to building a minimal C++ addon using node-addon-api, compiling it, and calling it from JavaScript. Perfect for those taking their first steps into native module development."
+---
+
+# Create Your First Addon
+
+A hands-on guide to building a minimal C++ addon using **node-addon-api**, compiling it, and calling it from JavaScript. This guide is designed for developers taking their first steps into native module development with Node.js.
+
+---
+
+## 1. Workflow Overview
+
+### What You Will Achieve
+You will create a simple native C++ addon using **node-addon-api**, compile it with `node-gyp`, and call its function from JavaScript. This foundational understanding sets the stage for building more complex native modules that seamlessly integrate C++ and Node.js.
+
+### Prerequisites
+- Node.js installed (preferably an active LTS version like 18.x or above).
+- Basic C++ development environment (compiler, build tools).
+- `node-gyp` installed globally or locally.
+- Your project set up with **node-addon-api** as a dependency.
+
+### Expected Outcome
+- A working native addon exposing a C++ function callable from JavaScript.
+- A minimal `binding.gyp` configured to build your addon.
+- Clear understanding of the addon structure, build process, and usage pattern.
+
+### Time Estimate
+Approximately 20–30 minutes for setup, build, and first test.
+
+### Difficulty Level
+Beginner
+
+---
+
+## 2. Step-by-Step Instructions
+
+### Step 1: Set Up Your Project
+1. Create a new directory for your addon project.
+2. Initialize a new Node.js project:
+
+```bash
+mkdir my-addon && cd my-addon
+npm init -y
+```
+
+3. Install `node-addon-api` as a dependency:
+
+```bash
+npm install node-addon-api
+```
+
+### Step 2: Create `binding.gyp`
+Create a file named `binding.gyp` in your project root with the following minimal content: 
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "addon",
+      "sources": ["addon.cc"],
+      "include_dirs": ["<!@(node -p \"require('node-addon-api').include_dir\")"],
+      "defines": [ "NAPI_CPP_EXCEPTIONS" ],
+      "cflags_cc!": ["-fno-exceptions"],
+      "cflags!": ["-fno-exceptions"]
+    }
+  ]
+}
+```
+
+This configuration:
+- Specifies your addon build target name (`addon`).
+- Includes your C++ source file `addon.cc`.
+- Sets include path for the **node-addon-api** headers.
+- Enables C++ exceptions for better error handling.
+
+### Step 3: Write Your C++ Addon Code
+Create a file `addon.cc` with the following content:
+
+```cpp
+#include <napi.h>
+
+// This function will be exposed to JavaScript
+Napi::String Hello(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  return Napi::String::New(env, "Hello from C++ addon!");
+}
+
+// Initialization function that sets up the addon exports
+Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  exports.Set("hello", Napi::Function::New(env, Hello));
+  return exports;
+}
+
+// Register the addon with Node.js
+NODE_API_MODULE(addon, Init)
+```
+
+This code:
+- Includes the `napi.h` header from **node-addon-api**.
+- Defines a function `Hello` returning a string.
+- Registers the function under the export name `hello`.
+- Registers the module with `NODE_API_MODULE` macro.
+
+### Step 4: Build the Addon
+Run the following command to build your addon:
+
+```bash
+npx node-gyp configure build
+```
+
+On success, this will compile `addon.cc` into a binary module.
+
+### Step 5: Use the Addon from JavaScript
+Create a file `test.js` with:
+
+```js
+const addon = require('./build/Release/addon');
+
+console.log(addon.hello()); // Outputs: Hello from C++ addon!
+```
+
+Run this script:
+
+```bash
+node test.js
+```
+You should see the greeting message printed.
+
+### Verification
+If you see `Hello from C++ addon!` printed, your addon is successfully built and called from JavaScript.
+
+---
+
+## 3. Explanation and Best Practices
+
+### Why Use `node-addon-api`?
+- Simplifies Node-API’s C interface into a C++ object model.
+- Supports exception handling, making error workflows cleaner.
+- Provides stability across Node.js versions.
+
+### Handling Errors
+By enabling `NAPI_CPP_EXCEPTIONS`, you can throw C++ exceptions that integrate cleanly with JavaScript errors.
+
+### Managing Project Structure
+- Keep `.cc` files small and focused.
+- Use descriptive naming for export functions.
+- Modularize larger addons into classes using `Napi::ObjectWrap`.
+
+---
+
+## 4. Troubleshooting & Tips
+
+<AccordionGroup title="Common Issues and Solutions">
+<Accordion title="Build Errors Related to Include Directories">
+Ensure your `binding.gyp` includes the correct include path for node-addon-api headers:
+
+```gyp
+"include_dirs": ["<!@(node -p \"require('node-addon-api').include_dir\")"]
+```
+
+Without this, the compiler may fail to find `napi.h`.
+</Accordion>
+
+<Accordion title="Module Cannot Be Found When Requiring in JS">
+Make sure you use the correct relative path to your built addon binary. Usually it lives in `./build/Release/addon.node`.
+
+Use:
+
+```js
+require('./build/Release/addon')
+```
+
+Do not omit the path or file extension.
+</Accordion>
+
+<Accordion title="Exception Handling Not Working as Expected">
+Verify that `NAPI_CPP_EXCEPTIONS` is defined in your `binding.gyp` to enable exception support in node-addon-api.
+
+If your project disables exceptions, native thrown errors might crash Node.js.
+</Accordion>
+
+<Accordion title="Build Tool Requirements">
+Ensure you have a proper C++ compiler and `node-gyp` configured in your environment. Refer to the **Setup Your Environment** guide for platform-specific requirements.
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Enable verbose build output with `node-gyp rebuild --verbose` to diagnose compilation issues.
+</Tip>
+
+---
+
+## 5. Next Steps & Related Content
+
+- Explore the [Setup Your Environment](../setup-your-environment) guide to configure your platform correctly.
+- Dive into [Choosing a Build System](../build-systems-overview) if you want alternatives to `node-gyp` like `cmake-js`.
+- Advance to [Running and Using Your Addon](../running-addon) for testing techniques and usage patterns.
+- Study [Error Handling & Exception Propagation](../../advanced-best-practices/error-handling) to handle complex error scenarios gracefully.
+- Consult [Object Lifetime Management](../../object-lifetime-management) to master memory and resource management in addons.
+
+---
+
+## Further Reading and Resources
+
+- [Node.js Addons Documentation](https://nodejs.org/api/addons.html)
+- [Node-API Documentation](https://nodejs.org/api/n-api.html)
+- [node-addon-api GitHub Repository](https://github.com/nodejs/node-addon-api)
+- [Node-Gyp Documentation](https://github.com/nodejs/node-gyp)
+- Example projects on the [node-addon-examples](https://github.com/nodejs/node-addon-examples) repo
+
+---
+
+Embark now on building powerful native addons with confidence, knowing this solid foundation will scale with your projects.
