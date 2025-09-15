@@ -1,0 +1,403 @@
+---
+title: "Value Types and JavaScript Interop"
+description: "Covers the mapping between JavaScript types and their C++ representations in node-addon-api. Explains how to handle primitive values, strings, numbers, arrays, booleans, symbols, and BigInt, including type conversion and lifetime management."
+---
+
+# Value Types and JavaScript Interop
+
+This page details how node-addon-api maps JavaScript types to their C++ representations, providing seamless interoperation and rich functionality. Understanding these mappings empowers you to write native addons that work confidently with JavaScript values, enabling accurate type checking, safe conversions, and efficient memory management.
+
+---
+
+## 1. Overview of Value Types
+
+Node-addon-api wraps Node-API primitives into a hierarchy of C++ classes to represent JavaScript values. Each JavaScript type has a corresponding C++ wrapper class, which provides methods for type checking, conversions, and property access.
+
+| JavaScript Type    | C++ Wrapper Class  |
+|--------------------|--------------------|
+| `undefined`        | `Napi::Value` (IsUndefined) |
+| `null`             | `Napi::Value` (IsNull)      |
+| `boolean`          | `Napi::Boolean`             |
+| `number`           | `Napi::Number`              |
+| `bigint`           | `Napi::BigInt` *(NAPI_VERSION > 5)* |
+| `string`           | `Napi::String`              |
+| `symbol`           | `Napi::Symbol`              |
+| `object`           | `Napi::Object`              |
+| `function`         | `Napi::Function`            |
+| `array`            | `Napi::Array`               |
+| `arraybuffer`      | `Napi::ArrayBuffer`         |
+| `typedarray`       | `Napi::TypedArray` and `Napi::TypedArrayOf<T>` |
+| `dataview`         | `Napi::DataView`            |
+| `promise`          | `Napi::Promise`             |
+| external pointer   | `Napi::External<T>`         |
+
+
+## 2. Primitive Values
+
+### Boolean
+Use `Napi::Boolean` to wrap JavaScript Boolean values.
+
+```cpp
+// Create a new Boolean value
+Napi::Boolean val = Napi::Boolean::New(env, true);
+
+// Convert a Napi::Value to Boolean
+bool flag = val.Value();
+```
+
+### Number
+JavaScript numbers map to `Napi::Number`. This supports integer and floating-point values.
+
+```cpp
+Napi::Number num = Napi::Number::New(env, 42.5);
+double d = num.DoubleValue();
+int32_t i = num.Int32Value();
+```
+
+### BigInt (NAPI_VERSION > 5)
+Big integers are supported by `Napi::BigInt`.
+
+```cpp
+#if NAPI_VERSION > 5
+Napi::BigInt bigInt = Napi::BigInt::New(env, 123456789012345);
+int64_t val = bigInt.Int64Value(nullptr); // lossless flag optional
+#endif
+```
+
+### String
+Strings are represented by `Napi::String`, supporting UTF-8 and UTF-16 encodings.
+
+```cpp
+Napi::String str = Napi::String::New(env, "hello");
+std::string stdStr = str.Utf8Value();
+std::u16string utf16Str = str.Utf16Value();
+```
+
+### Symbol
+Symbols map to `Napi::Symbol`, including well-known and global symbols.
+
+```cpp
+Napi::Symbol sym = Napi::Symbol::New(env, "desc");
+auto iteratorSym = Napi::Symbol::WellKnown(env, "iterator");
+```
+
+## 3. Complex Values
+
+### Object
+The `Napi::Object` class represents JavaScript objects, enabling reading, writing, and defining properties with fine-grained control.
+
+- Supports accessing properties by string, index, or another `Napi::Value` key.
+- Provides `DefineProperty` and `DefineProperties` to add descriptors.
+- Supports checking property existence and deleting properties.
+
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+obj.Set("key", Napi::Number::New(env, 42));
+bool hasKey = obj.Has("key").UnwrapOr(false);
+Napi::Value val = obj.Get("key");
+```
+
+### Arrays
+JavaScript arrays are wrapped by `Napi::Array`.
+
+```cpp
+Napi::Array arr = Napi::Array::New(env, 3);
+arr.Set(uint32_t(0), Napi::String::New(env, "first"));
+uint32_t length = arr.Length();
+```
+
+### ArrayBuffer
+Array buffers represent raw binary data buffers.
+
+```cpp
+Napi::ArrayBuffer buffer = Napi::ArrayBuffer::New(env, 1024); // 1KB buffer
+void* data = buffer.Data();
+```
+
+### TypedArray and TypedArrayOf<T>
+TypedArrays provide views over buffers using fixed element types, like Int32Array or Uint8Array.
+
+```cpp
+Napi::TypedArray ta = ...;
+if (ta.TypedArrayType() == napi_int32_array) {
+  Napi::Int32Array ia = ta.As<Napi::Int32Array>();
+  int32_t* data = ia.Data();
+}
+// TypedArrayOf<T> is templated for a specific type T:
+Napi::TypedArrayOf<uint8_t> uint8Array = Napi::TypedArrayOf<uint8_t>::New(env, 10);
+```
+
+### DataView
+Allows reading/writing of multiple number types from an ArrayBuffer without endianness concerns.
+
+```cpp
+Napi::ArrayBuffer ab = Napi::ArrayBuffer::New(env, 16);
+Napi::DataView dv = Napi::DataView::New(env, ab);
+dv.SetInt32(0, 42);
+int32_t val = dv.GetInt32(0);
+```
+
+### Promise
+Represents JavaScript promises, supporting chaining with `.Then` and `.Catch`.
+
+```cpp
+Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+Napi::Promise promise = deferred.Promise();
+// Later
+deferred.Resolve(Napi::String::New(env, "done"));
+```
+
+### External
+Wraps native pointers for passing opaque data between JS and C++.
+
+```cpp
+int data = 100;
+Napi::External<int> ext = Napi::External<int>::New(env, &data);
+int* pData = ext.Data(); // Access native pointer
+```
+
+## 4. Type Checking and Safe Casting
+
+Each wrapper supports type checking methods such as `IsString()`, `IsNumber()`, `IsArray()`, etc., to verify the underlying JavaScript value type.
+
+Casting is done through `As<T>()` which performs runtime checks, throwing JavaScript exceptions for mismatches if enabled.
+
+```cpp
+Napi::Value val = ...;
+if (val.IsString()) {
+  Napi::String str = val.As<Napi::String>();
+}
+```
+
+If exceptions are disabled, operations return empty values or `Maybe<T>`, and users must handle these cautiously.
+
+## 5. Value Construction and Conversion Helpers
+
+`Napi::Value::From(env, value)` family provides convenient static factory methods for implicit conversions from fundamental C++ types to Napi values.
+
+Example:
+
+```cpp
+Napi::Value val1 = Napi::Value::From(env, 42);       // Number
+Napi::Value val2 = Napi::Value::From(env, true);     // Boolean
+Napi::Value val3 = Napi::Value::From(env, "text"); // String
+```
+
+For strings, `Napi::String::New` overloads accept UTF-8 and UTF-16 inputs.
+
+## 6. Property Access with Operator[]
+
+`Napi::Object` supports the convenient `operator[]` for property access and assignment, mirroring JavaScript syntax:
+
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+obj["message"] = Napi::String::New(env, "Hello World");
+Napi::Value msg = obj["message"];
+```
+
+Assignment via `operator[]` returns a proxy object enabling chaining or modification.
+
+## 7. Managing Lifetime and Finalizers
+
+Objects wrapping native data can register finalizers to clean up resources when the JS object is garbage collected.
+
+```cpp
+obj.AddFinalizer([](Napi::Env env, void* data) {
+  delete static_cast<MyNativeType*>(data);
+}, myNativeDataPtr);
+```
+
+This mechanism helps manage memory safely and prevent leaks.
+
+## 8. Working with Values in Callbacks
+
+`Napi::CallbackInfo` provides access to function arguments as wrapped values, enabling type checking and safe conversions.
+
+```cpp
+Napi::String firstArg = info[0].As<Napi::String>();
+Napi::Number secondArg = info[1].ToNumber();
+```
+
+Use `MaybeOrValue<T>` helpers (`MaybeUnwrap`, etc.) to handle exception scenarios when exceptions are disabled.
+
+## 9. Practical Example
+
+Here's a brief example illustrating some common operations:
+
+```cpp
+Napi::Object MyFunction(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Create an object
+  Napi::Object obj = Napi::Object::New(env);
+
+  // Set properties
+  obj["foo"] = Napi::Number::New(env, 123);
+  obj.Set("bar", Napi::String::New(env, "text"));
+
+  // Access property
+  Napi::Value val = obj["foo"];
+  if (val.IsNumber()) {
+    int fooVal = val.As<Napi::Number>();
+    // ... use fooVal
+  }
+
+  return obj;
+}
+```
+
+## 10. Common Pitfalls and Best Practices
+
+- Always validate value types using `Is*()` methods before casting with `As<T>()`.
+- Handle empty or invalid values especially when C++ exceptions are disabled.
+- Use `AddFinalizer` to manage native resource lifetimes and avoid memory leaks.
+- When working with strings, be aware of encoding differences between UTF-8 and UTF-16.
+
+## 11. Troubleshooting
+
+- **Casting failures**: If casting throws an error, check the actual JavaScript type with `Is*()` before casting.
+- **Empty values**: Using uninitialized or empty values signals pending JS exceptions; handle them by checking `IsEmpty()`.
+- **Finalizers not called**: Ensure you attach finalizers properly to objects holding native pointers to avoid leaks.
+
+## 12. References and Additional Resources
+
+- [`Napi::Value` and derived classes](./value.md) - Detailed API for JavaScript values.
+- [`Napi::Object`](./object.md) - Object manipulation and property descriptors.
+- [`Napi::CallbackInfo`](./callbackinfo.md) - Callback argument handling.
+- [Core Concepts & Terminology](../../overview/architecture-and-concepts/core-concepts-and-terminology.md) - Foundational understanding.
+- [Error Handling and Exception Propagation](../error-handling-lifecycle/error-exceptions.md)
+
+
+---
+
+For a visual summary of the value types hierarchy and interrelations, see the [Full Class Hierarchy](./hierarchy.md).
+
+---
+
+<AccordionGroup title="Code Examples">
+<Accordion title="Creating and Checking JavaScript Values">
+```cpp
+Napi::Env env = ...;
+
+// Create primitive values
+Napi::Boolean b = Napi::Boolean::New(env, true);
+Napi::Number n = Napi::Number::New(env, 3.14);
+Napi::String s = Napi::String::New(env, "hello");
+
+// Type check
+if (b.IsBoolean()) { /* safe to cast */ }
+if (n.IsNumber()) { /* safe to cast */ }
+
+// Cast (runtime check occurs)
+bool val = b.Value();
+double pi = n.DoubleValue();
+std::string hello = s.Utf8Value();
+```
+</Accordion>
+<Accordion title="Working with Objects and Properties">
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+
+// Using operator[]
+obj["count"] = Napi::Number::New(env, 42);
+
+// Using explicit Get/Set
+bool hasCount = obj.Has("count").UnwrapOr(false);
+Napi::Value countVal = obj.Get("count");
+
+// Delete a property
+obj.Delete("count");
+```
+</Accordion>
+<Accordion title="Using External Values and Finalizers">
+```cpp
+int* nativeData = new int(123);
+Napi::Object obj = Napi::Object::New(env);
+
+// Attach native data to JS object with cleanup finalizer
+obj.AddFinalizer([](Napi::Env env, int* data){
+  delete data;
+}, nativeData);
+
+Napi::External<int> ext = Napi::External<int>::New(env, nativeData);
+```
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Mermaid Diagram: Value Type Class Hierarchy
+
+```mermaid
+classDiagram
+    class Value {
+        +bool IsEmpty()
+        +Env Env()
+        +Value As<T>()
+        +bool IsBoolean()
+        +bool IsNumber()
+        +bool IsString()
+        +bool IsSymbol()
+        +bool IsArray()
+        +bool IsObject()
+        +bool IsFunction()
+        +bool IsExternal()
+    }
+
+    class Boolean {
+        +bool Value()
+    }
+    class Number {
+        +int32_t Int32Value()
+        +double DoubleValue()
+    }
+    class BigInt {
+        +int64_t Int64Value(bool* lossless)
+    }
+    class String {
+        +std::string Utf8Value()
+    }
+    class Symbol {}
+    class Object {
+        +Value Get(key)
+        +bool Set(key, value)
+        +bool Has(key)
+        +bool Delete(key)
+    }
+    class Array {}
+    class ArrayBuffer {}
+    class TypedArray {}
+    class DataView {}
+    class External<T> {
+        +T* Data()
+    }
+    class Function {}
+    class Promise {}
+
+    Value <|-- Boolean
+    Value <|-- Number
+    Value <|-- BigInt
+    Value <|-- String
+    Value <|-- Symbol
+    Value <|-- Object
+    Object <|-- Array
+    Object <|-- ArrayBuffer
+    Object <|-- TypedArray
+    Object <|-- DataView
+    Value <|-- External
+    Object <|-- Function
+    Object <|-- Promise
+```
+
+---
+
+For quick testing and examples, see the [Value Type Test Suite](../test/basic_types/value.cc) which demonstrates comprehensive usage scenarios including type checking, casting, and property access.
+
+
+---
+
+## Summary
+
+This page is your definitive reference on how node-addon-api represents and manages JavaScript values in C++. It guides you through primitive and complex types, type safety, memory considerations, and interop mechanics for addon development.
+
+---

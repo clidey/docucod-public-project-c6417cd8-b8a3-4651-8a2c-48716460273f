@@ -1,0 +1,242 @@
+---
+title: "Quick Validation & Common Pitfalls"
+description: "Details practical steps to confirm your addon is running correctly, suggests validation scripts, and lists common initial failures (e.g., binding errors, missing headers) along with actionable troubleshooting steps."
+---
+
+# Quick Validation & Common Pitfalls
+
+This guide walks you through essential steps to quickly validate that your native addon, built using **node-addon-api**, is correctly installed and running. It also highlights common early issues and practical troubleshooting actions to help you resolve binding errors, missing headers, and build setup problems early in your development journey.
+
+---
+
+## 1. Confirming Your Addon Is Running Correctly
+
+After building your Node.js native addon with **node-addon-api**, it's crucial to verify that it loads and runs as expected. Follow these practical steps:
+
+### Step 1: Ensure Your Build Output Exists
+
+- Verify that the compiled addon (`*.node` file) is present in your build directory (e.g., `./build/Release/your_addon.node`).
+
+```bash
+ls ./build/Release/your_addon.node
+```
+
+- If the file is missing, revisit your build configuration or build logs to catch compilation failures.
+
+### Step 2: Run a Simple Validation Script
+
+Create a minimal test JavaScript file to load your addon and execute a basic function:
+
+```js
+// test-validate.js
+const addon = require('./build/Release/your_addon.node');
+
+console.log('Addon loaded successfully:', typeof addon);
+
+if (typeof addon.yourFunction === 'function') {
+  console.log('yourFunction() output:', addon.yourFunction());
+} else {
+  console.error('Expected function yourFunction() not found in addon.');
+  process.exit(1);
+}
+```
+
+Run this script:
+
+```bash
+node test-validate.js
+```
+
+**Expected outcome:**
+- The addon loads without errors.
+- Your exported function runs and prints output.
+
+<Tip>
+Use this validation to catch runtime binding failures immediately after build.
+</Tip>
+
+### Step 3: Use Provided Validation Tests (Optional)
+
+If your project includes automated tests (e.g., under a `test/` folder), running them is a good way to validate behavior:
+
+```bash
+npm test
+```
+
+or
+
+```bash
+node ./test/index.js
+```
+
+These tests often include checks for proper exports, error handling, and runtime behavior.
+
+---
+
+## 2. Common Initial Failures and How to Fix Them
+
+When first building and running your addon, certain issues frequently arise. Here’s a quick checklist of common pitfalls with actionable remedies.
+
+### 2.1 Binding Loading Errors
+
+**Symptoms:**
+- `Error: Cannot find module './build/Release/your_addon.node'`
+- `Error: Invalid ELF header` or similar.
+
+**Causes & Fixes:**
+- Addon was not built or build failed silently.
+- Wrong path used in `require()`.
+- Platform architecture mismatch (e.g., built on a different OS/arch).
+
+**Actions:**
+- Ensure you run `node-gyp rebuild` or your build command successfully.
+- Verify the path and filename in your require statement exactly matches output.
+- Clean your build (`node-gyp clean`) and rebuild.
+
+### 2.2 Missing or Incorrect Headers
+
+**Symptoms:**
+- Compilation errors citing missing headers like `node_api.h` or `napi.h`.
+
+**Causes & Fixes:**
+- `node-addon-api` package not installed or included properly in build.
+- `include_dirs` missing or misconfigured in `binding.gyp` or CMake.
+
+**Actions:**
+- Confirm you have `node-addon-api` in your `package.json` dependencies.
+- Add the include directory correctly, for example in `binding.gyp`:
+
+```json
+{
+  "includes": [ "<(node -p \"require('node-addon-api').gyp\")" ],
+  "targets": [{
+    "include_dirs": [ "<!@(node -p \"require('node-addon-api').include_dir\")" ]
+  }]
+}
+```
+
+- Follow the documented build environment setup to correctly incorporate headers.
+
+### 2.3 C++ Exception Handling Issues
+
+**Symptoms:**
+- Build failures due to exception handling flags.
+- Runtime crashes or unexpected termination.
+
+**Causes & Fixes:**
+- Compiler flags not set to enable exceptions.
+- Inconsistent exception handling settings across your build.
+
+**Actions:**
+- Configure `binding.gyp` with exception flags (e.g., `-fexceptions`) as needed.
+- Consult the [Configuring Your Build Environment](/getting-started/setup-basics/configuring-build) guide for detailed setup.
+
+### 2.4 ABI Version Mismatches
+
+**Symptoms:**
+- Runtime errors referencing unsupported N-API versions or ABI incompatibilities.
+
+**Causes & Fixes:**
+- Using a Node.js version different from the one targeted during build.
+- Addon compiled with an incompatible or outdated N-API version.
+
+**Actions:**
+- Ensure your build targets the Node.js version you run against.
+- Explicitly set the N-API version in your build environment if necessary.
+- Review `package.json` and build configuration for compatibility settings.
+
+### 2.5 Environment Variables and Flags
+
+Some features depend on environment flags or settings.
+
+**Examples:**
+- `NODE_ADDON_API_DISABLE_CPP_EXCEPTIONS`
+- `NAPI_VERSION`
+
+Check and adjust environment vars if your addon build or run behavior seems off.
+
+---
+
+## 3. Practical Tips for Smooth Validation
+
+- **Enable verbose build logs:** Run `node-gyp rebuild --verbose` to get detailed insights.
+- **Automate tests:** Integrate addon validation scripts into your CI process.
+- **Isolate environment issues:** Test your addon on a clean setup or container.
+- **Check Node.js version:** Confirm compatibility with your Node.js runtime.
+- **Update Dependencies:** Regularly update `node-addon-api` to get bug fixes and improvements.
+
+---
+
+## 4. Troubleshooting Quick Reference
+
+<AccordionGroup title="Common Issues and Solutions">
+<Accordion title="Addon fails to load at runtime">
+- Verify path and filename.
+- Ensure build completed without errors.
+- Use absolute path temporarily to debug.
+- Check Node.js and architecture compatibility.
+</Accordion>
+<Accordion title="Compilation errors related to napi.h or node_api.h">
+- Confirm `node-addon-api` is installed.
+- Adjust include paths in your build config.
+- Run `npm install` before building.
+</Accordion>
+<Accordion title="Unexpected crashes or fatal errors">
+- Check exception handling flags.
+- Confirm that your addon is compiled with matching flags.
+- Use logs and debug symbols if available.
+</Accordion>
+<Accordion title="Function not found or undefined in addon">
+- Check export names in your binding source.
+- Verify binding.gyp exports and binding code alignment.
+- Use `console.log(Object.keys(addon))` to list exported functions.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 5. Next Steps
+
+Once your addon validates correctly:
+
+- Explore the [Creating Your First Addon](/getting-started/first-addon-and-validation/your-first-addon) to build functional native modules.
+- Follow [Running and Using Your Addon](/getting-started/first-addon-and-validation/running-addon) for examples on invocation and integration.
+- Consult the [Troubleshooting Setup Issues](/getting-started/troubleshooting/troubleshooting-guide) if you encounter deeper problems.
+
+<Tip>
+Validation is the foundation for stable addon development. Prioritize confirming correct binding load and function export before advancing.
+</Tip>
+
+---
+
+## 6. Additional Resources
+
+- [Installation Instructions](/getting-started/setup-basics/install-instructions) — for complete build setup guidance.
+- [Configuring Your Build Environment](/getting-started/setup-basics/configuring-build) — detailed config for exception flags and build variants.
+- [Error Handling & Exception Propagation](/guides/advanced-best-practices/error-handling) — for advanced troubleshooting.
+
+---
+
+<Check>
+Following these quick validation steps ensures you catch and resolve common issues early, saving development time and enhancing addon stability.
+</Check>
+
+
+---
+
+## 7. Frequently Asked Questions (FAQs)
+
+<AccordionGroup title="FAQs">
+<Accordion title="Why does require() fail to load my addon despite a successful build?">
+Check the path carefully; the require path is relative to the script's location. Also, confirm that the filename matches your build output exactly. Sometimes rebuilds overwrite files to different locations.
+</Accordion>
+<Accordion title="My build shows warnings but still produces .node file—is it ok to proceed?">
+Warnings can sometimes be harmless, but critical warnings related to exceptions or ABI compatibility should be resolved. It’s best to address all warnings to avoid hard-to-track runtime errors.
+</Accordion>
+<Accordion title="How do I verify which Node.js and N-API version my addon targets?">
+Check your `binding.gyp`, build logs, and `process.versions.napi` at runtime. Consistency between build and runtime versions is vital.
+</Accordion>
+<Accordion title="Can I automate these validation tests?">
+Absolutely. Incorporate your validation scripts or test suites into CI pipelines for continuous verification.
+</Accordion>
+</AccordionGroup>

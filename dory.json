@@ -1,0 +1,199 @@
+{
+  "background": {
+    "decoration": "gradient"
+  },
+  "colors": {
+    "dark": "#1E3A8A",
+    "light": "#60A5FA",
+    "primary": "#60A5FA"
+  },
+  "favicon": "/favicon.svg",
+  "fonts": {
+    "family": "Montserrat",
+    "format": "woff2",
+    "source": "https://fonts.gstatic.com/s/googlesansflex/v5/t5sJIQcYNIWbFgDgAAzZ34auoVyXkJCOvp3SFWJbN5hF8Ju1x6sKCyp0l9sI40swNJwGpVd4AZzz0v6lJ4qFXNZhGjLvDSkV4USKMo6qQzwliVdHAy9jxTDHg_ugnAakpwGc-cxgUqDCIUI.woff2"
+  },
+  "icons": {
+    "library": "fontawesome"
+  },
+  "logo": {
+    "dark": "./logo/logo.svg",
+    "light": "./logo/logo.svg"
+  },
+  "name": "node-addon-api",
+  "navigation": {
+    "tabs": [
+      {
+        "groups": [
+          {
+            "group": "Product Introduction \u0026 Value",
+            "pages": [
+              "overview/introduction-and-value/what-is-node-addon-api",
+              "overview/introduction-and-value/value-proposition",
+              "overview/introduction-and-value/target-audience-and-use-cases"
+            ]
+          },
+          {
+            "group": "Architecture \u0026 Core Concepts",
+            "pages": [
+              "overview/architecture-and-concepts/system-architecture",
+              "overview/architecture-and-concepts/core-concepts-and-terminology",
+              "overview/architecture-and-concepts/feature-overview",
+              "overview/architecture-and-concepts/integration-points"
+            ]
+          }
+        ],
+        "tab": "Overview"
+      },
+      {
+        "groups": [
+          {
+            "group": "Installation \u0026 Prerequisites",
+            "pages": [
+              "getting-started/setup-basics/system-requirements",
+              "getting-started/setup-basics/install-instructions",
+              "getting-started/setup-basics/configuring-build"
+            ]
+          },
+          {
+            "group": "Your First Addon \u0026 Validation",
+            "pages": [
+              "getting-started/first-addon-and-validation/your-first-addon",
+              "getting-started/first-addon-and-validation/running-addon",
+              "getting-started/first-addon-and-validation/quick-validation"
+            ]
+          },
+          {
+            "group": "Troubleshooting \u0026 FAQs",
+            "pages": [
+              "getting-started/troubleshooting/troubleshooting-guide",
+              "getting-started/troubleshooting/support-and-contribution"
+            ]
+          }
+        ],
+        "tab": "Getting Started"
+      },
+      {
+        "groups": [
+          {
+            "group": "Core C++ API Classes",
+            "pages": [
+              "api-reference/core-cpp-api/value-types",
+              "api-reference/core-cpp-api/object-management",
+              "api-reference/core-cpp-api/buffers-memory"
+            ]
+          },
+          {
+            "group": "Async Operations and Thread Safety",
+            "pages": [
+              "api-reference/async-and-threading/async-workers",
+              "api-reference/async-and-threading/promises-async",
+              "api-reference/async-and-threading/threadsafe-functions"
+            ]
+          },
+          {
+            "group": "Error Handling and Environment Lifecycle",
+            "pages": [
+              "api-reference/error-handling-lifecycle/error-exceptions",
+              "api-reference/error-handling-lifecycle/env-management"
+            ]
+          },
+          {
+            "group": "Integration and Build Configuration",
+            "pages": [
+              "api-reference/integration-build/setup-build",
+              "api-reference/integration-build/api-versioning-support"
+            ]
+          }
+        ],
+        "tab": "API Reference"
+      },
+      {
+        "groups": [
+          {
+            "group": "Core Architecture and Design",
+            "pages": [
+              "concepts/architecture-overview/node-addon-api-vs-node-api",
+              "concepts/architecture-overview/object-model",
+              "concepts/architecture-overview/exception-handling",
+              "concepts/architecture-overview/lifetime-management"
+            ]
+          },
+          {
+            "group": "Addon Integration and Interoperability",
+            "pages": [
+              "concepts/integration-and-workflows/data-types-mapping",
+              "concepts/integration-and-workflows/async-programming",
+              "concepts/integration-and-workflows/addon-initialization",
+              "concepts/integration-and-workflows/versioning-compatibility"
+            ]
+          },
+          {
+            "group": "Advanced Design Patterns",
+            "pages": [
+              "concepts/advanced-patterns/scalability-performance",
+              "concepts/advanced-patterns/integration-tooling"
+            ]
+          }
+        ],
+        "tab": "Concepts"
+      },
+      {
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "guides/getting-started/setup-your-environment",
+              "guides/getting-started/create-your-first-addon",
+              "guides/getting-started/build-systems-overview"
+            ]
+          },
+          {
+            "group": "Core Patterns \u0026 Workflows",
+            "pages": [
+              "guides/core-patterns/working-with-values",
+              "guides/core-patterns/object-management",
+              "guides/core-patterns/buffers-and-typedarrays",
+              "guides/core-patterns/async-patterns"
+            ]
+          },
+          {
+            "group": "Advanced Guides \u0026 Best Practices",
+            "pages": [
+              "guides/advanced-best-practices/error-handling",
+              "guides/advanced-best-practices/memory-management-guide",
+              "guides/advanced-best-practices/version-compatibility",
+              "guides/advanced-best-practices/performance-tuning"
+            ]
+          }
+        ],
+        "tab": "Guides"
+      },
+      {
+        "groups": [
+          {
+            "group": "Release History \u0026 Highlights",
+            "pages": [
+              "changelog/release-history/version-timeline",
+              "changelog/release-history/notable-features",
+              "changelog/release-history/resolved-issues"
+            ]
+          },
+          {
+            "group": "Breaking Changes \u0026 Migration Guides",
+            "pages": [
+              "changelog/breaking-changes-migrations/breaking-changes",
+              "changelog/breaking-changes-migrations/deprecation-notices",
+              "changelog/breaking-changes-migrations/upgrade-guides"
+            ]
+          }
+        ],
+        "tab": "Changelog"
+      }
+    ]
+  },
+  "styling": {
+    "codeblocks": "dark",
+    "eyebrows": "breadcrumbs"
+  }
+}

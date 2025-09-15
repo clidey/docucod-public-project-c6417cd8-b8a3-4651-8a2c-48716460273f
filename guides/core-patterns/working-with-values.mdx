@@ -1,0 +1,281 @@
+---
+title: "Working with Values, Numbers, and Strings"
+description: "A practical tour of manipulating primitive data types in node-addon-api, including numbers, strings, and Booleans—the backbone for data exchange between C++ and JavaScript."
+---
+
+# Working with Values, Numbers, and Strings
+
+## Overview
+
+This guide provides a practical introduction to manipulating primitive data types in **node-addon-api**, focusing on how to work with numbers, strings, and Booleans. These types are fundamental for exchanging data between your native C++ addon and JavaScript.
+
+By the end of this guide, you will be able to create, convert, and manipulate primitive JavaScript values from native code, ensuring clean and effective interoperation.
+
+## Prerequisites
+
+- Familiarity with C++ basics.
+- A working native addon setup using **node-addon-api** (see [Setup](setup.md)).
+- Understanding of how to write basic JavaScript bindings.
+
+## Time Estimate
+
+About 15-20 minutes to grasp core concepts and try out examples.
+
+## Difficulty Level
+
+Beginner to Intermediate
+
+---
+
+## 1. Understanding `Napi::Value`
+
+`Napi::Value` is the base class for representing JavaScript values in **node-addon-api**. It is convertible to specific types such as `Napi::Number`, `Napi::String`, and `Napi::Boolean`.
+
+### Key Points
+
+- You can check the type of a `Napi::Value` instance with `.IsNumber()`, `.IsString()`, `.IsBoolean()`, etc.
+- Use `.As<T>()` to cast to a known subtype without coercion (the value must be of that type).
+- Use `.To<T>()` for type coercion when converting.
+
+### Example: Checking and Casting
+
+```cpp
+Napi::Value val = ...; // Received from JS
+if (val.IsNumber()) {
+  Napi::Number number = val.As<Napi::Number>();
+  double doubleVal = number.DoubleValue();
+  // Use doubleVal in native logic
+} else {
+  // Handle unexpected type
+}
+```
+
+---
+
+## 2. Working with Numbers
+
+The `Napi::Number` class encapsulates JavaScript numbers.
+
+### Creating a Number
+
+```cpp
+Napi::Env env = info.Env();
+Napi::Number myNum = Napi::Number::New(env, 42.5);
+```
+
+### Extracting Native Numeric Values
+
+```cpp
+double value = myNum.DoubleValue();
+int32_t intValue = myNum.Int32Value();
+```
+
+These methods convert the JavaScript number to the corresponding C++ native type.
+
+### Using Numbers in Function Calls
+
+When calling JavaScript functions from C++, you can easily pass numbers:
+
+```cpp
+Napi::Function jsFunc = ...;
+jsFunc.Call({ Napi::Number::New(env, 10), Napi::Number::New(env, 20) });
+```
+
+### Example: Returning a Number
+
+```cpp
+Napi::Value Add(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  double a = info[0].As<Napi::Number>().DoubleValue();
+  double b = info[1].As<Napi::Number>().DoubleValue();
+  return Napi::Number::New(env, a + b);
+}
+```
+
+---
+
+## 3. Working with Strings
+
+Strings are represented by the `Napi::String` class.
+
+### Creating a String
+
+```cpp
+Napi::Env env = info.Env();
+Napi::String hello = Napi::String::New(env, "Hello World");
+```
+
+### Extracting Native C++ Strings
+
+```cpp
+std::string utf8String = hello.Utf8Value();
+std::u16string utf16String = hello.Utf16Value();
+```
+
+### Using Strings in Properties and Function Calls
+
+Assign strings as object properties or pass them to JS functions:
+
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+obj.Set("greeting", hello);
+jsFunction.Call({ hello });
+```
+
+### Coercing a Value to a String
+
+If you're unsure if a value is a string, you can coerce:
+
+```cpp
+Napi::String strVal = val.ToString();
+```
+
+### Example: Returning a String Property
+
+```cpp
+Napi::Value GetName(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  std::string name = "AddonUser";
+  return Napi::String::New(env, name);
+}
+```
+
+---
+
+## 4. Working with Booleans
+
+Booleans use the `Napi::Boolean` class.
+
+### Creating a Boolean
+
+```cpp
+Napi::Boolean bTrue = Napi::Boolean::New(env, true);
+```
+
+### Extracting Native Boolean Values
+
+```cpp
+bool nativeBool = bTrue.Value();
+```
+
+### Coercing a Value to Boolean
+
+```cpp
+Napi::Boolean boolVal = val.ToBoolean();
+```
+
+### Example: Returning a Boolean
+
+```cpp
+Napi::Value IsPositive(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  double num = info[0].As<Napi::Number>().DoubleValue();
+  return Napi::Boolean::New(env, num > 0);
+}
+```
+
+---
+
+## 5. Conversion and Safe Usage Tips
+
+- Use `.Is*()` methods to check types before casting with `.As<T>()`.
+- Use `.To*()` when coercion is desired.
+- When receiving values from JavaScript, validate input types for safety.
+- Always use the `Env` instance from the callback or context when creating new values.
+
+---
+
+## 6. Practical Examples
+
+### Example: Add Two Numbers
+
+```cpp
+Napi::Value Add(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Validate arguments
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
+    Napi::TypeError::New(env, "Expected two numbers").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  double a = info[0].As<Napi::Number>().DoubleValue();
+  double b = info[1].As<Napi::Number>().DoubleValue();
+
+  return Napi::Number::New(env, a + b);
+}
+```
+
+### Example: Concatenate Strings
+
+```cpp
+Napi::Value Concat(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 2 || !info[0].IsString() || !info[1].IsString()) {
+    Napi::TypeError::New(env, "Expected two strings").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string str1 = info[0].As<Napi::String>().Utf8Value();
+  std::string str2 = info[1].As<Napi::String>().Utf8Value();
+
+  return Napi::String::New(env, str1 + str2);
+}
+```
+
+### Example: Return Boolean Result
+
+```cpp
+Napi::Value IsEven(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Expected one number").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  int32_t val = info[0].As<Napi::Number>().Int32Value();
+  bool isEven = (val % 2) == 0;
+
+  return Napi::Boolean::New(env, isEven);
+}
+```
+
+---
+
+## 7. Common Pitfalls and Troubleshooting
+
+- **Not checking type before casting:** Always confirm with `.IsX()` before `.As<X>()` to prevent exceptions.
+- **Ignoring environment context:** Always use the provided `Napi::Env`, and never create values with a stale or null environment.
+- **Using `ToX()` without handling failure:** Coercion can fail if a value cannot be converted; check for exceptions when using coercion.
+- **Mistaking C++ strings for UTF-8:** Use `.Utf8Value()` on `Napi::String` to get proper UTF-8 encoded `std::string`.
+
+If you encounter exceptions or unexpected behavior, consider enabling C++ exceptions support as explained in the [Setup Guide](setup.md) and reviewing your argument validation.
+
+---
+
+## 8. Next Steps & Related Content
+
+- Dive deeper into working with complex objects in the [Objects & Arrays Guide](guides/core-patterns/object-management.md).
+- Learn how to use buffers and typed arrays for efficient binary data exchange in [Buffers and Typed Arrays](guides/core-patterns/buffers-and-typedarrays.md).
+- Explore asynchronous patterns with [Async Workflows & Thread-Safety](guides/core-patterns/async-patterns.md).
+- Understand error handling and exception propagation in [Error Handling & Exception Propagation](guides/advanced-best-practices/error-handling.md).
+
+---
+
+For more detailed API references on these value types, visit:
+
+- [Napi::Number](number.md)
+- [Napi::String](string.md)
+- [Napi::Boolean](boolean.md)
+- [Napi::Value](value.md)
+
+
+## References
+
+- Setup and build your environment: [Setup Guide](setup.md)
+- Error handling patterns: [Error Handling](error_handling.md)
+- Full API Reference: [node-addon-api Documentation](doc/README.md)
+
+---

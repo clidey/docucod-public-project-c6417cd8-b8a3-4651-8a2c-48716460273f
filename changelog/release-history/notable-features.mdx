@@ -1,0 +1,102 @@
+---
+title: "Notable Features & Enhancements"
+description: "Explore a curated summary of the most impactful features, optimizations, and improvements introduced in recent releases. This helps users identify upgrade value and leverage new capabilities without having to parse each entry in the raw changelog."
+---
+
+# Notable Features & Enhancements
+
+Explore a curated summary of the most impactful features, optimizations, and improvements introduced in recent node-addon-api releases. These highlights focus on user-facing benefits such as improved build integration, enhanced exception support, and refined performance, enabling you to quickly grasp the upgrade value and leverage new capabilities effectively.
+
+---
+
+## 1. Enhanced Build System Integration
+
+### Flexible Exception Handling Options
+Users can now select from multiple Node-API wrapper variants via `binding.gyp` configuration to better match their native addon's exception handling needs:
+- **No exceptions (`node_addon_api`)**: Suitable for environments that disable C++ exceptions for stricter error control and smaller binaries.
+- **Exceptions for `Napi::Error` only (`node_addon_api_except`)**: Enables fine-grained exception handling restricted to Node-API errors.
+- **Catch all native C++ exceptions (`node_addon_api_except_all`)**: Provides comprehensive integration with legacy or third-party C++ code that throws diverse exceptions.
+
+This flexibility empowers developers to tailor the reliability and error management of their addons to their project requirements.
+
+### Variant Targets and Customization
+Variant targets such as `binding_noexcept`, `binding_swallowexcept`, and `binding_custom_namespace` have been introduced and refined:
+- **`binding_noexcept`** disables C++ exceptions, ensuring builds are compatible on exception-disabled platforms.
+- **`binding_swallowexcept`** allows controlling uncaught exceptions' behavior to avoid fatal process termination in terminating environments.
+- **`binding_custom_namespace`** enables defining custom C++ namespaces for the Node-API wrapper classes to prevent symbol collisions.
+
+Practical usage involves configuring these variants in your `binding.gyp` to match your project's build policies and namespace conventions.
+
+<Tip>
+Define the appropriate `dependencies` and preprocessor `defines` in your `binding.gyp` to activate the desired variant. This modular approach simplifies managing multiple build flavors simultaneously.
+</Tip>
+
+### Platform-Specific Build Flags
+Support for macOS-specific compiler flags (`-fvisibility=hidden`) and Xcode settings has been added to optimize symbol visibility and binary size. Windows and Linux platform considerations are actively maintained to ensure seamless cross-platform compatibility.
+
+---
+
+## 2. Improved Source Organization and Build Automation
+
+### Dynamic Source Compilation
+The test suite and sample bindings utilize dynamic source file lists generated via Node.js scripts (e.g., `injectTestParams` and `generate-binding-cc.js`), allowing maintainers to:
+- Automatically include relevant test source files.
+- Generate binding source files (`generated/binding.cc`) during build time, ensuring up-to-date compilation without manual file management.
+
+This automation streamlines development workflows and reduces build maintenance overhead.
+
+### Clear Dependency Management
+Targets explicitly declare dependencies on generated sources and Node-API headers to guarantee correct build order and inclusion. This reduces build errors and ensures consistent environment setups across developer machines and CI/CD pipelines.
+
+---
+
+## 3. Expanded Support for Exception Handling and Safety
+
+### Comprehensive Exception Model
+The introduction and refinement of the `except.gypi`, `except_all` targets, and corresponding definitions enable better blending of C++ exception semantics with Node.js error management:
+- Users can seamlessly throw and catch exceptions derived from `Napi::Error` or all native exceptions.
+- Preprocessor flags like `NODE_ADDON_API_CPP_EXCEPTIONS_ALL` offer backward-compatible options for legacy exception flows.
+
+### Safe Exception Swallowing
+The `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` define prevents fatal crashes on uncatchable exceptions during the addon lifecycle, catering to scenarios where addon stability is critical over strict error halting.
+
+<Tip>
+Enable `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` carefully, understanding that it bypasses fatal error termination and may mask certain runtime issues.
+</Tip>
+
+---
+
+## 4. Better Finalizer and Resource Management
+
+A key enhancement involves more configurable finalizer behavior, allowing users to:
+- Opt into basic finalizers for tighter control using `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS`.
+- Balance addon performance versus finalizer API restrictions.
+
+This empowers addon authors to refine native resource lifecycle management in harmony with their performance and safety goals.
+
+---
+
+## 5. Versioning and Compatibility
+
+The package continues to support LTS Node.js versions starting with Node.js 18.x, with clear versioning and deprecation policies maintained in the changelog. Badge-based version indicators help users to identify the minimum supported Node-API version and adjust their addon compatibility matrix accordingly.
+
+---
+
+## Practical Upgrade Tips
+
+- Review your `binding.gyp` to utilize the improved variant targets and defines that best fit your exception and build policy.
+- Leverage the dynamic source generation features in test and sample projects to simplify maintenance.
+- Test with both exception-enabled and noexcept variants to confirm robustness across environments.
+- Consult the related [Setup and Build System Integration guide](/api-reference/integration-build/setup-build) for detailed examples on adopting these enhancements.
+
+---
+
+## Related Documentation and Resources
+
+- [Setup and Build System Integration](/api-reference/integration-build/setup-build)
+- [Exception Handling and Propagation](/concepts/architecture-overview/exception-handling)
+- [Environment and Resource Management](/api-reference/error-handling-lifecycle/env-management)
+- [Version Timeline and Support Policies](/changelog/release-history/version-timeline)
+- [Getting Started: Configuring Your Build Environment](/getting-started/setup-basics/configuring-build)
+
+---

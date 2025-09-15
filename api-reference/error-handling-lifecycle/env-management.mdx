@@ -1,0 +1,206 @@
+---
+title: "Environment and Resource Management"
+description: "Documents environment (Napi::Env) handling, finalizer behavior, cleanup hooks, and resource lifecycle patterns to ensure memory safety and predictability in addon modules."
+---
+
+# Environment and Resource Management
+
+Managing the lifecycle of an environment (`Napi::Env`) and the associated resources is critical to building robust native addons using the node-addon-api. This documentation guides you through essential patterns and best practices to ensure predictable, memory-safe, and efficient usage of environment handles, finalizers, cleanup hooks, and related resource management techniques.
+
+---
+
+## Understanding `Napi::Env`
+
+`Napi::Env` represents a handle to the JavaScript environment (JS engine context) within which your addon executes. It acts as an anchor for all operations interacting with JavaScript values and APIs. Proper handling of the environment is critical as it governs the scope in which your native objects and functions are valid.
+
+- **Environment Lifetime**: `Napi::Env` remains valid during the lifetime of the Node.js context (typically the Node process or thread).
+- **Safe Interactions**: All API calls in node-addon-api require an active `Napi::Env` to ensure the correct JavaScript context.
+
+### Practical Primer
+Always obtain `Napi::Env` from the `Napi::CallbackInfo` when inside a JS callback or from the constructor of your addon module. Avoid caching `Napi::Env` beyond the scope where it is valid.
+
+```cpp
+Napi::Value MyFunction(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  // Use env for JS operations, e.g., creating values
+  return Napi::String::New(env, "Hello from native!");
+}
+```
+
+---
+
+## Finalizers and Object Lifecycle
+
+Native addons sometimes allocate native resources tied to JavaScript objects. When these JS objects are garbage collected, you need a way to clean up native resources to prevent memory leaks.
+
+### What Are Finalizers?
+Finalizers are callbacks that run after the associated JavaScript object is no longer reachable and before the native memory is reclaimed. Node-addon-api provides easy binding of finalizers to native resources.
+
+### Basic Usage
+Use `Napi::ObjectWrap` or explicit finalizer registrations to attach native cleanup code.
+
+```cpp
+class MyObject : public Napi::ObjectWrap<MyObject> {
+public:
+  MyObject(const Napi::CallbackInfo& info) : Napi::ObjectWrap<MyObject>(info) {
+    // Allocate native resource
+  }
+
+  ~MyObject() {
+    // Clean native resource here
+  }
+};
+```
+
+Alternatively, when creating buffers or objects with native backing:
+
+```cpp
+void CleanupCallback(Napi::Env env, void* nativeData, void* /*hint*/) {
+  delete static_cast<MyNativeResource*>(nativeData);
+}
+
+Napi::Buffer<char> CreateBuffer(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  size_t size = 1024;
+  MyNativeResource* resource = new MyNativeResource(size);
+  return Napi::Buffer<char>::New(env, resource->Data(), size, CleanupCallback, resource);
+}
+```
+
+### Restrictions & Best Practices
+- **Limited APIs in Finalizers**: Node-addon-api provides basic finalizers that restrict the API surface you can call safely during finalization to avoid stale references.
+- **Enabling Basic Finalizers**: The preprocessor directive `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` forces use of these restrictive finalizers for safety and efficiency. Define this in your build if necessary.
+
+<Tip>
+For most addons, rely on `Napi::ObjectWrap` destructors or buffer finalizers to manage native cleanup correctly. Improper finalizer handling can cause memory leaks or crashes.
+</Tip>
+
+---
+
+## Cleanup Hooks and Environment Termination
+
+In some scenarios, you need to run code during environment teardown, such as when the Node.js environment is about to be destroyed or a worker thread ends.
+
+### Registering Cleanup Hooks
+Use `Napi::Env::AddCleanupHook` to register a callback to be invoked during environment cleanup.
+
+```cpp
+void CleanupCallback(void* data) {
+  MyResource* resource = static_cast<MyResource*>(data);
+  resource->Release();
+  delete resource;
+}
+
+void Init(Napi::Env env) {
+  MyResource* resource = new MyResource();
+  env.AddCleanupHook(CleanupCallback, resource);
+}
+```
+
+### When Are Cleanup Hooks Called?
+- During normal process or environment shutdown.
+- After JavaScript no longer has references and garbage collection starts finalization.
+
+### Notes
+- Cleanup hooks should not assume arbitrary Node-API calls; maintain minimal API usage similar to finalizers.
+- Avoid long-running operations or complex manipulations inside cleanup hooks.
+
+---
+
+## Resource Lifecycle Patterns
+
+Managing native resources alongside JS objects requires consistent patterns to maintain memory safety and predictability.
+
+### Pattern 1: Use `Napi::ObjectWrap`
+Wrap native resources in classes that inherit from `Napi::ObjectWrap`. This tightly binds the native resource lifecycle to the JS object.
+
+- Cleanup is handled in destructors safely.
+- JS objects reflect native state transparently.
+
+### Pattern 2: Buffer or External Wrappers
+For raw data or external pointers, attach finalizers to buffers or external value wrappers.
+
+### Pattern 3: Environment Cleanup Hooks
+For global or shared resources that outlive individual objects, register environment cleanup hooks.
+
+### Example Summary
+```cpp
+class MyAddonClass : public Napi::ObjectWrap<MyAddonClass> {
+  // Native resource and finalizer management in destructor
+};
+
+Napi::Buffer<char> CreateDataBuffer() {
+  // Attach finalizer to buffer
+}
+
+void SetupGlobalResource(Napi::Env env) {
+  env.AddCleanupHook(...);
+}
+```
+
+---
+
+## Common Pitfalls and Troubleshooting
+
+<Warning>
+- **Caching `Napi::Env` beyond its valid scope** leads to undefined behavior and hard-to-debug crashes.
+- **Performing complex Node-API operations inside finalizers or cleanup hooks** can cause runtime errors because the environment may be in an unstable state.
+- **Forgetting to manage native memory properly** results in memory leaks.
+</Warning>
+
+### Troubleshooting Tips
+- Use `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` to enforce safe finalizer usage and detect dangerous calls.
+- Verify that native cleanup code is actually called by adding debug logging or breakpoints.
+- Check build configurations to ensure exception handling and visibility flags are correctly set when dealing with native resources.
+
+---
+
+## Build Configuration Notes
+
+To integrate proper environment and resource management, update your `binding.gyp` as follows:
+
+```gyp
+{
+  'include_dirs': [
+    '<!(node -p "require(\'node-addon-api\').include_dir")'
+  ],
+  'defines': [ 'NAPI_CPP_EXCEPTIONS' ],
+  'conditions': [
+    ['require_basic_finalizers=="true"', {
+      'defines': ['NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS']
+    }],
+    ['OS=="mac"', {
+      'cflags+': ['-fvisibility=hidden'],
+      'xcode_settings': {
+        'OTHER_CFLAGS': ['-fvisibility=hidden']
+      }
+    }]
+  ]
+}
+```
+
+This setup ensures:
+- node-addon-api headers are included.
+- C++ exceptions are enabled.
+- Optionally, basic finalizers are enforced.
+- Proper symbol visibility on macOS.
+
+---
+
+## Summary
+Managing `Napi::Env` and native resource lifecycles effectively safeguards your addon from leaks, crashes, and unpredictable behavior. By leveraging the built-in support for finalizers, cleanup hooks, and adhering to established lifecycle patterns including `Napi::ObjectWrap`, you ensure memory safety and reliable integration with the Node.js runtime.
+
+Always follow best practices to avoid pitfalls around environment caching and restricted API usage during finalization.
+
+---
+
+## Related Documentation
+- [Setup and Build System Integration](/api-reference/integration-build/setup-build)
+- [Error Handling and Exception Propagation](/api-reference/error-handling-lifecycle/error-exceptions)
+- [Core Concepts & Terminology](/overview/architecture-and-concepts/core-concepts-and-terminology)
+- [Configuration Guide](/getting-started/setup-basics/configuring-build)
+- [Finalizers Explained](./finalization.md)
+
+---
+
+This page fits amid documentation covering lifecycle management and error handling, guiding you through environment-aware resource control that complements the API reference for asynchronous operations and error management.

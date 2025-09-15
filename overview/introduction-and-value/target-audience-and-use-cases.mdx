@@ -1,0 +1,68 @@
+---
+title: "Who Should Use This? Common Use Cases"
+description: "Identifies the target users—C++ and Node.js developers writing or maintaining native addons—and core scenarios, including performance-critical code, legacy code modernization, or advanced system integrations. Briefly lists key use cases where node-addon-api provides unique value."
+---
+
+# Who Should Use This? Common Use Cases
+
+## Unlocking Native Power for C++ and Node.js Developers
+
+node-addon-api is designed to empower developers who need to write or maintain native addons for Node.js, specifically those working with C++ or Node.js environments. If your work involves integrating native performance into your JavaScript applications, modernizing legacy code, or building advanced system integrations, this module addresses your core challenges with precision and reliability.
+
+### Target Users
+- **C++ Developers:** Writing high-performance native modules that interface seamlessly with Node.js.
+- **Node.js Developers:** Building or maintaining native addons needing efficient, ABI-stable C++ wrappers.
+- **Engineers Managing Legacy Code:** Migrating or modernizing older addons built with older APIs or manual bindings.
+- **System Integrators:** Creating advanced functionality that requires direct access to system-level features not exposed via JavaScript.
+
+
+## Why Node-addon-api Fits Your Needs
+
+### Performance-Critical Code
+If you are developing native components where execution speed and low latency are paramount — for example, in cryptography, image processing, or real-time data manipulation — node-addon-api offers a low-overhead C++ wrapper around Node-API, preserving the performance of native code while simplifying interface complexity.
+
+### Legacy Code Modernization
+Many existing Node.js addons were built using now-deprecated or more cumbersome binding layers. node-addon-api serves as a modern, ABI-stable foundation that helps you incrementally migrate these native modules without needing extensive rewrites or frequent recompilation across Node.js versions.
+
+### Advanced System Integrations
+When your application needs to bridge deeply into the operating system or external hardware through native code — such as accessing custom device drivers or interfacing with specialized libraries — node-addon-api’s stable and consistent abstraction lets you do so reliably within the Node.js ecosystem.
+
+
+## Core Scenarios Where node-addon-api Shines
+
+- **Building Efficient Native Modules:** Quickly create bindings to C++ libraries with minimal boilerplate and robust resource management.
+- **Maintaining ABI Stability:** Develop native addons that continue to work across Node.js releases without recompiling.
+- **Enabling C++ Exception Handling:** Use familiar C++ error handling patterns that integrate with JavaScript exceptions seamlessly.
+- **Simplifying Asynchronous Workflows:** Leverage built-in async workers and thread-safe functions to enable non-blocking native operations.
+
+
+## Real-World Examples
+
+- **Database Drivers:** C++ components requiring fast binary protocols and native memory management.
+- **Multimedia Processing:** Wrapping native libraries for video, audio, or graphics processing.
+- **Cryptographic Operations:** Implementing performance-sensitive security algorithms.
+- **Legacy Addon Updates:** Refactoring older NAN or V8 bindings to the stable Node-API standards via node-addon-api.
+
+
+## Summary
+If your work involves any scenario where native performance, stability, or advanced system interfacing is critical, node-addon-api is the natural choice. It bridges the gap between C++ and Node.js with clarity, stability, and ease of use.
+
+
+---
+
+## Practical Tips
+- Familiarize yourself with the [Setup](setup.md) page to get your build environment ready.
+- Review the [Error Handling](error_handling.md) documentation to integrate robust exception management.
+- Look through the [Examples](https://github.com/nodejs/node-addon-examples) for starter projects and real code samples.
+
+
+## Common Pitfalls to Avoid
+
+- Avoid direct dependencies on node-gyp internals—use the recommended bindings in your build files.
+- Do not rely on deprecated V8 or NAN APIs; they complicate portability and ABI stability.
+- Always test your addons across supported Node.js LTS versions to validate ABI compatibility.
+
+
+<Info>
+For more on why node-addon-api matters, see the [Value Proposition](value-proposition.md) page. To understand how this fits into the larger ecosystem, explore [What is node-addon-api?](what-is-node-addon-api.md) and [System Architecture Overview](system-architecture.md).
+</Info>

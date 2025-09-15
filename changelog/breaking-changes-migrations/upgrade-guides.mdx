@@ -1,0 +1,179 @@
+---
+title: "Upgrade & Migration Guides"
+description: "Step-by-step, practical instructions for upgrading codebases between major node-addon-api versions. Tips, code snippets, and checklists reduce churn and help users modernize their add-ons safely."
+---
+
+# Upgrade & Migration Guides
+
+Upgrade & Migration Guides provide you with step-by-step, practical instructions to smoothly transition your codebase between major versions of **node-addon-api**. Upgrading native addons can be challenging due to breaking changes, evolving APIs, and new best practices — this guide minimizes disruptions by offering targeted tips, clear code snippets, and helpful checklists.
+
+---
+
+## Why Upgrading Matters
+
+When working with **node-addon-api**, staying current with major versions ensures access to improved API designs, enhanced performance, security fixes, and better compatibility with Node.js active LTS releases. However, major versions may introduce changes that affect your native addon’s source and build configuration. Upgrading carefully:
+
+- Prevents runtime errors and crashes
+- Enables use of the latest idiomatic C++ wrapper APIs
+- Improves maintenance and future-proofing
+
+---
+
+## Upgrade Workflow: Step-by-Step
+
+Follow this structured approach to modernize your addon with minimal friction:
+
+### 1. Prepare Your Environment
+
+- **Review breaking changes**: Understand what API or build system shifts occurred since your current version.
+- **Backup codebase**: Always keep a safe snapshot of your current working addon.
+- **Update dependencies:** `npm install node-addon-api@latest`
+- **Examine your build files:** Confirm compatibility with the new version requirements, especially `binding.gyp`, including handling deprecated directives.
+
+### 2. Use the Conversion Script
+
+To automate bulk updates, utilize the included migration conversion tool:
+
+```bash
+npm install node-addon-api
+node ./node_modules/node-addon-api/tools/conversion.js ./
+```
+
+This script automatically refactors many common API changes:
+
+- Changes method return values to `void` where appropriate
+- Updates property/method access from pointer-style (`->`) to dot notation (`.`) on Napi objects
+- Converts deprecated constructors and instantiations to new idioms like `Napi::[Type]::New(env, value)`
+
+**Important**: The conversion script accelerates migration but does not cover complex manual fixes. Expect to build and test incrementally, and then resolve remaining issues.
+
+### 3. Refactor ObjectWrap Usage
+
+A major breaking change is the transition from NAN-based `ObjectWrap` to the native `Napi::ObjectWrap` model:
+
+- Change your constructors to accept `const Napi::CallbackInfo& info` and inherit from `Napi::ObjectWrap`.
+- Move original constructor code inside the new constructor body.
+- Register instance and static methods using `DefineClass`, associating native functions clearly.
+- Access wrapped instances using the `this` pointer rather than NAN unwrap methods.
+
+Example:
+
+```cpp
+class MyClass : public Napi::ObjectWrap<MyClass> {
+public:
+  MyClass(const Napi::CallbackInfo& info) : Napi::ObjectWrap<MyClass>(info) {
+    // Constructor code here
+  }
+
+  static Napi::FunctionReference constructor;
+
+  static void Init(Napi::Env env, Napi::Object exports) {
+    Napi::HandleScope scope(env);
+
+    Napi::Function func = DefineClass(env, "MyClass", {
+      InstanceMethod<&MyClass::Method1>("method1"),
+      StaticMethod<&MyClass::StaticMethod>("staticMethod")
+    });
+
+    constructor = Napi::Persistent(func);
+    constructor.SuppressDestruct();
+    exports.Set("MyClass", func);
+  }
+
+  // Methods implementations...
+};
+```
+
+### 4. Update Build System Configurations
+
+Major releases may deprecate or remove certain properties in your Node.js addon build files (`binding.gyp` or others). Check the following:
+
+- Remove deprecated properties like `include` in favor of `include_dir`.
+- Use new target names for dependencies: 
+  - `node_addon_api` (default)
+  - `node_addon_api_except` (for catching only `Napi::Error` exceptions)
+  - `node_addon_api_except_all` (for all native exceptions)
+  - `node_addon_api_maybe` (safe API type guards without exceptions)
+
+- Properly define preprocessor macros for disabling deprecated APIs or enabling exceptions.
+- Add platform-specific flags for macOS with `-fvisibility=hidden`.
+
+Example snippet for exception-enabled builds in `binding.gyp`:
+
+```gyp
+{
+  'dependencies': [
+    "<!(node -p \"require('node-addon-api').targets\"):node_addon_api_except"
+  ],
+  'conditions': [
+    ['OS=="mac"', {
+      'cflags+': ['-fvisibility=hidden'],
+      'xcode_settings': {
+        'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES'
+      }
+    }]
+  ]
+}
+```
+
+### 5. Test Thoroughly and Address Remaining Issues
+
+- Attempt to build your addon with the updated node-addon-api.
+- Address compile errors and warning messages iteratively.
+- Run addon tests to verify functionality.
+- Debug any issues related to object lifetime, threading, exception handling, or API calls.
+- Consult error handling and environment management guides for troubleshooting.
+
+---
+
+## Practical Tips & Best Practices
+
+- **Prefer exception-enabled builds** where possible: They provide seamless C++ and JavaScript error interoperation.
+- **Avoid deprecated APIs** by defining `NODE_ADDON_API_DISABLE_DEPRECATED` at compile time.
+- **Take advantage of code reviews and incremental upgrades**: Moving through minor versions before the next major can ease transition effort.
+- **Leverage community support**: Submit issues if you hit unexpected migration blockers.
+- **Keep all related documentation open**: Build integration, error handling, and version compatibility pages are highly relevant.
+
+---
+
+## Checklist Before Upgrading
+
+- [ ] Confirm current node-addon-api version and target upgrade version.
+- [ ] Read release notes for all intermediate major versions regarding breaking changes.
+- [ ] Backup your code and dependencies.
+- [ ] Run the migration conversion script.
+- [ ] Refactor ObjectWrap patterns and method signatures.
+- [ ] Update build configurations removing deprecated properties.
+- [ ] Rebuild and test addon.
+- [ ] Address warning and errors.
+- [ ] Validate with real workloads.
+
+---
+
+## Troubleshooting Common Migration Issues
+
+<AccordionGroup title="Common Migration Issues & Solutions">
+<Accordion title="Build fails due to deprecated properties in binding.gyp">
+Ensure you remove deprecated keys such as `include` from your `binding.gyp`. Replace with supported properties like `include_dir`. Check for updated target names according to the latest node-addon-api version.
+</Accordion>
+<Accordion title="Symbol resolution issues at runtime after upgrade">
+Verify your `binding.gyp` dependencies include the correct node-addon-api target matching your desired exception handling mode. Rebuild with clean caches and node module reinstallation to avoid linking outdated binaries.
+</Accordion>
+<Accordion title="Compilation errors related to ObjectWrap constructors">
+Make sure all native classes inheriting `Napi::ObjectWrap` have constructors taking `const Napi::CallbackInfo&` and that original constructors are removed. Follow the new `DefineClass` registration style handing instance and static methods.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Additional Resources
+
+- [Breaking Changes & Migration Guidance](./breaking-changes) — Detailed info on API and build changes that affect upgrades.
+- [Setup & Build Integration](../../../api-reference/integration-build/setup-build) — Configuration examples and explanations for binding.gyp.
+- [Error Handling & Exception Propagation](../../../guides/advanced-best-practices/error-handling) — Manage exceptions smoothly.
+- [API Versioning & Compatibility](../../../concepts/integration-and-workflows/versioning-compatibility) — Target Node-API versions effectively.
+- [Conversion Tool Documentation](./conversion-tool) — Guide on running and understanding the conversion script.
+
+---
+
+Upgrade confidently by following this guide, leveraging the migration tool, and gradually adapting your code. Keeping your native addons modern with the latest **node-addon-api** ensures stability, maintainability, and smooth integration with the evolving Node.js ecosystem.

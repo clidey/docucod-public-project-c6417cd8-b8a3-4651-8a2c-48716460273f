@@ -1,0 +1,303 @@
+---
+title: "Async Workers and Execution Models"
+description: "Provides guidance and documentation for background task execution using AsyncWorker and its variants. Explains worker lifecycle, callback handling, progress reporting, and cancellation patterns."
+---
+
+# Async Workers and Execution Models
+
+Efficiently managing background tasks is crucial when building native Node.js addons to prevent blocking the event loop. This page provides clear guidance on using the `AsyncWorker` class and its variants to execute asynchronous operations on worker threads, while safely communicating results, progress, and cancellation states back to JavaScript.
+
+---
+
+## Understanding Async Workers
+
+The `Napi::AsyncWorker` class abstracts the complexities of running asynchronous work on background threads separate from the Node.js event loop thread. It handles lifecycle management, callback invocation, and error propagation, enabling you to focus on the logic of your background operation.
+
+### Why use Async Workers?
+
+- Keep JavaScript responsive by offloading CPU-intensive or blocking operations.
+- Manage asynchronous workflows with automatic queueing and callback execution.
+- Report operation progress and allow cancellation.
+- Integrate directly with Node.js native addon lifecycle and resource tracking.
+
+---
+
+## Core Concepts of AsyncWorker Lifecycle
+
+The primary stages and user-implemented methods of an async worker include:
+
+- **Construction & Initialization:** Create an instance of an AsyncWorker or subclass, optionally associating resource metadata.
+- **Queueing:** Call `Queue()` to schedule the worker on a libuv thread pool.
+- **Work Execution (`Execute`):** Implement this method to perform the background task; runs on the worker thread.
+- **Error Handling:** Call `SetError()` within `Execute()` to signal failure; this skips the success callback.
+- **Completion Handling (`OnOK`, `OnError`):** Run on the event loop thread to notify JS about success or failure.
+
+### Example Structure
+
+```cpp
+class SampleWorker : public Napi::AsyncWorker {
+ public:
+  SampleWorker(Napi::Function& callback) : AsyncWorker(callback) {}
+
+  void Execute() override {
+    // Perform background computation here
+    // On error: SetError("error message");
+  }
+
+  void OnOK() override {
+    // Notify JavaScript of success
+    Callback().Call({Env().Null(), Napi::String::New(Env(), "done")});
+  }
+
+  void OnError(const Napi::Error& e) override {
+    // Notify JavaScript of error
+    Callback().Call({e.Value()});
+  }
+};
+
+void RunSampleWorker(const Napi::CallbackInfo& info) {
+  Napi::Function cb = info[0].As<Napi::Function>();
+  SampleWorker* worker = new SampleWorker(cb);
+  worker->Queue();
+}
+```
+
+---
+
+## Using AsyncWorker with Callbacks
+
+AsyncWorker communicates with JavaScript exclusively through callbacks specified at construction. These callbacks receive either error or success signals after the background execution completes.
+
+### Key Details
+- The success callback (`OnOK`) receives any results.
+- The error callback (`OnError`) provides `Napi::Error` details.
+- Callbacks execute on the event loop thread, preserving JS concurrency expectations.
+
+### Example: Reporting Success or Failure
+
+```cpp
+class ResultWorker : public Napi::AsyncWorker {
+ public:
+  ResultWorker(Napi::Function& cb, bool succeed)
+      : AsyncWorker(cb), _succeed(succeed) {}
+
+  void Execute() override {
+    if (!_succeed) {
+      SetError("operation failed");
+    }
+  }
+
+  void OnOK() override {
+    Callback().Call({Env().Null(), Napi::String::New(Env(), "Success")});
+  }
+
+  void OnError(const Napi::Error& e) override {
+    Callback().Call({e.Value()});
+  }
+
+ private:
+  bool _succeed;
+};
+```
+
+---
+
+## Reporting Progress: AsyncProgressWorker and AsyncProgressQueueWorker
+
+When your background tasks have meaningful stage updates or progress states, use `AsyncProgressWorker` or `AsyncProgressQueueWorker`. These classes extend `AsyncWorker` to enable progress notifications to JavaScript.
+
+### How Progress Reporting Works
+
+- Implement `Execute(const ExecutionProgress& progress)` for your background logic.
+- Use `progress.Send(data, count)` to send progress data to JS.
+- Override `OnProgress(const T* data, size_t count)` to handle progress callbacks.
+
+### Example: Progress Reporting Pattern
+
+```cpp
+struct ProgressData {
+  int32_t percent;
+};
+
+class ProgressWorker : public Napi::AsyncProgressWorker<ProgressData> {
+ public:
+  ProgressWorker(Napi::Function& cb, Napi::Function& progressCb)
+      : AsyncProgressWorker(cb), _progressCb(Napi::Persistent(progressCb)) {}
+
+  void Execute(const ExecutionProgress& progress) override {
+    for (int i = 0; i <= 100; i += 10) {
+      ProgressData data{ i };
+      progress.Send(&data, 1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+
+  void OnProgress(const ProgressData* data, size_t) override {
+    _progressCb.Call(Receiver().Value(), {Napi::Number::New(Env(), data->percent)});
+  }
+
+ private:
+  Napi::FunctionReference _progressCb;
+};
+```
+
+---
+
+## AsyncWorker with Promise Support (No Callback)
+
+For modern JavaScript usage, you may opt to implement workers that return promises rather than use callbacks.
+
+### Pattern Summary
+
+- Instantiate the AsyncWorker with an Env reference.
+- Use an internal `Napi::Promise::Deferred` to create and manage the promise.
+- Override `OnOK` and `OnError` to respectively resolve or reject the promise.
+- Return `deferred.Promise()` to the caller.
+
+### Example: AsyncWorker Returning Promise
+
+```cpp
+class PromiseWorker : public Napi::AsyncWorker {
+ public:
+  PromiseWorker(Napi::Env env) : AsyncWorker(env), _deferred(Napi::Promise::Deferred::New(env)) {}
+
+  Napi::Promise GetPromise() {
+    return _deferred.Promise();
+  }
+
+  void Execute() override {
+    // Background work
+  }
+
+  void OnOK() override {
+    _deferred.Resolve(Env().Undefined());
+  }
+
+  void OnError(const Napi::Error& e) override {
+    _deferred.Reject(e.Value());
+  }
+
+ private:
+  Napi::Promise::Deferred _deferred;
+};
+
+// Usage in exported function
+Napi::Value RunPromiseWorker(const Napi::CallbackInfo& info) {
+  auto* worker = new PromiseWorker(info.Env());
+  worker->Queue();
+  return worker->GetPromise();
+}
+```
+
+---
+
+## Cancellation Patterns
+
+### Canceling Queued Work
+
+The AsyncWorker supports cancellation via its `Cancel()` method, which sets a flag checked in your implementation. You must cooperatively check the cancellation status to abort long-running tasks safely.
+
+### Implementation Notes
+
+- Call `Cancel()` on the worker instance before the task completes.
+- Override `OnError` or `OnOK` to handle cleanup and final callback behavior.
+- Cancellation calls should be made from the event loop thread context.
+
+### Example Workflow
+
+```cpp
+worker->Cancel();
+
+// Within Execute(), periodically check IsCancelled() and exit early
+void Execute() override {
+  while (!IsCancelled()) {
+    // perform chunk of work
+  }
+  if (IsCancelled()) {
+    SetError("Operation cancelled");
+  }
+}
+```
+
+### Important
+
+Attempting to call `Cancel()` after the worker has finished or is not queued will not have an effect and may throw an error when exceptions are enabled.
+
+---
+
+## Best Practices and Tips
+
+- Always implement proper error handling in `Execute()` with informative `SetError()` messages.
+- Prefer using `AsyncProgressWorker` where progress updates improve user experience.
+- Use promises for cleaner asynchronous JavaScript interfaces.
+- Manage worker lifecycle carefully to avoid memory leaks; `Queue()` transfers ownership to the Node.js event loop.
+- Test cancellation scenarios thoroughly to ensure predictable and safe abort behavior.
+
+---
+
+## Common Pitfalls
+
+- Forgetting to call `Queue()` after worker construction blocks the operation.
+- Blocking the event loop thread inside AsyncWorker methods leads to deadlocks and freezes.
+- Modifying JavaScript state directly from `Execute()` triggers concurrency issues; use `OnOK`/`OnError`/`OnProgress` instead.
+- Ignoring resource handles and references can cause premature GC of native objects.
+
+---
+
+## Example in Practice
+
+Below is a succinct example illustrating a worker that executes a task asynchronously, reports progress, and supports cancellation.
+
+```cpp
+struct Progress {
+  int percent;
+};
+
+class ExampleWorker : public Napi::AsyncProgressWorker<Progress> {
+ public:
+  ExampleWorker(Napi::Function& cb, Napi::Function& progressCb)
+      : AsyncProgressWorker(cb),
+        _progressCb(Napi::Persistent(progressCb)),
+        _cancelled(false) {}
+
+  void Execute(const ExecutionProgress& progress) override {
+    for (int i = 0; i <= 100; i += 10) {
+      if (IsCancelled()) {
+        SetError("Cancelled by user");
+        return;
+      }
+      Progress prog{ i };
+      progress.Send(&prog, 1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+
+  void OnProgress(const Progress* data, size_t) override {
+    _progressCb.Call(Receiver().Value(), {Napi::Number::New(Env(), data->percent)});
+  }
+
+  void OnOK() override {
+    Callback().Call({Env().Null(), Napi::String::New(Env(), "Done")});
+  }
+
+  void OnError(const Napi::Error& e) override {
+    Callback().Call({e.Value()});
+  }
+
+ private:
+  Napi::FunctionReference _progressCb;
+};
+```
+
+---
+
+## Related Pages and Resources
+
+- [AsyncWorker class reference](/api-reference/async-and-threading/async-workers) — Full API details.
+- [Promises and Asynchronous Patterns](/api-reference/async-and-threading/promises-async) — Using promises with async workers.
+- [Threadsafe Functions and Safe Cross-Thread Calls](/api-reference/async-and-threading/threadsafe-functions) — Advanced thread-safe async invocation.
+- [Error Handling and Exception Propagation](/api-reference/error-handling-lifecycle/error-exceptions) — Ensuring robust async error reporting.
+
+---
+
+By applying the models and patterns documented here, you ensure your native addon delivers high performance, responsiveness, and a smooth developer experience when handling asynchronous tasks in Node.js applications.

@@ -1,0 +1,254 @@
+---
+title: "Setup and Build System Integration"
+description: "Step-by-step documentation to include node-addon-api in your C++ addon projects. Maps out configuration for node-gyp, cmake-js, and prebuild tools, including feature flags and version management."
+---
+
+# Setup and Build System Integration
+
+This guide provides a comprehensive walkthrough for incorporating **node-addon-api** into your C++ native addon projects. It focuses specifically on configuring your build system—primarily with **node-gyp** and **cmake-js**—to seamlessly integrate node-addon-api, manage feature flags, and handle version control. Follow this step-by-step documentation to enable robust, ABI-stable native addon development with effective build automation and precise exception handling control.
+
+---
+
+## 1. Prerequisites
+
+Before configuring your build environment, ensure these essentials are met:
+
+- **Node.js Installed**: Confirm you have a supported Node.js version installed.
+- **Native Addon Build Tool**: Install and set up [node-gyp](https://github.com/nodejs/node-gyp) or [cmake-js](https://github.com/cmake-js/cmake-js) to compile native addons.
+- **node-addon-api Package**: Include `node-addon-api` as a dependency in your project.
+
+<Tip>
+Ensuring your system meets these requirements avoids common pitfalls during build and integration.
+</Tip>
+
+---
+
+## 2. Including node-addon-api as a Dependency
+
+Add `node-addon-api` to your project’s `package.json` to access the C++ wrapper APIs:
+
+```json
+"dependencies": {
+  "node-addon-api": "*"
+}
+```
+
+This package supplies header files and gyp target references used during compilation.
+
+---
+
+## 3. Configuring node-gyp to Use node-addon-api
+
+Your native addon’s `binding.gyp` file orchestrates the build. Properly declaring node-addon-api as a dependency in this file ensures smooth integration.
+
+### 3.1 Select Exception Handling Strategy
+
+node-addon-api supports three main build configurations related to C++ exception handling:
+
+| Dependency Target          | Behavior                                                      | Usage Scenario                                  |
+|----------------------------|---------------------------------------------------------------|------------------------------------------------|
+| `node_addon_api`            | No C++ exceptions enabled (Node-API base ABI stable).         | Default or environments disallowing exceptions.|
+| `node_addon_api_except`    | Handles exceptions derived from `Napi::Error`.                | Integrate JS and C++ error handling.            |
+| `node_addon_api_except_all`| Catches *all* native C++ exceptions.                          | Advanced exception handling where all thrown exceptions need catching.|
+
+
+default, no exceptions example:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myaddon",
+      "sources": ["src/myaddon.cc"],
+      "dependencies": [
+        "<!@(node -p \"require('node-addon-api').targets\"):node_addon_api"
+      ]
+    }
+  ]
+}
+```
+
+exception-enabled example:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myaddon",
+      "sources": ["src/myaddon.cc"],
+      "dependencies": [
+        "<!@(node -p \"require('node-addon-api').targets\"):node_addon_api_except"
+      ]
+    }
+  ]
+}
+```
+
+### 3.2 Optional Feature Flags
+
+- **MAYBE Type Guards:**
+  To enable runtime type-checking to support exception-free builds but with safer invocation:
+
+  ```gyp
+  "dependencies": [
+    "<!@(node -p \"require('node-addon-api').targets\") : node_addon_api_maybe"
+  ]
+  ```
+
+- **Suppress Terminating Exceptions:**
+  Define `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` to prevent fatal termination on uncatchable runtime exceptions:
+
+  ```gyp
+  "defines": [ "NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS" ]
+  ```
+
+<Tip>
+Use these flags carefully. Enabling exceptions or suppressing terminating exceptions impacts addon stability and behavior under edge cases.
+</Tip>
+
+### 3.3 macOS Visibility Settings
+
+To avoid symbol visibility problems on macOS, add:
+
+```gyp
+"conditions": [
+  ["OS=='mac'", {
+    "cflags+": ["-fvisibility=hidden"],
+    "xcode_settings": {
+      "GCC_SYMBOLS_PRIVATE_EXTERN": "YES"
+    }
+  }]
+]
+```
+
+This reduces symbol exposure, improving build reliability and compatibility.
+
+---
+
+## 4. Build Configuration with cmake-js
+
+For developers preferring CMake builds, integrate node-addon-api by:
+
+- Adding node-addon-api include directories within your CMakeLists.txt.
+- Linking against node-addon-api targets according to exception preferences (parallel to node-gyp dependencies).
+
+Example snippet for header inclusion:
+
+```cmake
+include_directories(${NODE_ADDON_API_INCLUDE_DIRS})
+```
+
+Use CMake variables and definitions to replicate the exception handling macros and dependency flags.
+
+<Warning>
+cmake-js users should review node-addon-api and cmake-js documentation to correctly configure build variants and platform-specific settings.
+</Warning>
+
+---
+
+## 5. Source Code Integration
+
+In your C++ addon source files:
+
+- Include only `napi.h` and avoid headers like `node.h`, `nan.h`, or `v8.h` to maintain ABI stability:
+
+```cpp
+#include "napi.h"
+```
+
+- Avoid deprecated APIs if desired by defining the macro `NODE_ADDON_API_DISABLE_DEPRECATED` before inclusion.
+
+- Properly namespace your code if you enabled the `NAPI_CPP_CUSTOM_NAMESPACE` flag during build.
+
+---
+
+## 6. Version and Feature Management
+
+### 6.1 ABI Stability and Node Versions
+
+At build time, node-addon-api employs a back-compat library only if the targeted Node.js runtime does not natively support the required Node-API version.
+
+### 6.2 Preprocessor Flags and Behavior
+
+| Flag                                   | Effect                                                        |
+|---------------------------------------|---------------------------------------------------------------|
+| `NODE_ADDON_API_DISABLE_DEPRECATED`   | Exclude deprecated APIs                                        |
+| `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` | Prevent fatal Node.js process termination on exceptions that cannot be propagated |
+| `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` | Use basic finalizer types for improved efficiency but less convenience |
+
+---
+
+## 7. Distributing Prebuilt Binaries
+
+Building native addons at user install time can cause issues on some platforms. Using prebuild tools can ease this process.
+
+Supported tools include:
+
+- [node-pre-gyp](https://www.npmjs.com/package/node-pre-gyp)
+- [prebuild](https://www.npmjs.com/package/prebuild)
+- [prebuildify](https://www.npmjs.com/package/prebuildify)
+
+These tools enable distributing precompiled binaries across platforms and architectures, reducing installation friction for your users.
+
+---
+
+## 8. Troubleshooting and Best Practices
+
+<Warning>
+Incorrect binding.gyp configuration is the leading cause of build failures or runtime issues.
+</Warning>
+
+- Verify your dependency target matches your exception handling preference.
+- Make sure include directories are correctly set for all build variants.
+- On macOS, always apply visibility settings to avoid symbol export problems.
+- If you use advanced features like custom namespaces or swallowing exceptions, confirm that your build defines and source code are aligned.
+
+<Tip>
+Use verbose build logging (`node-gyp rebuild --verbose`) to track down configuration issues.
+</Tip>
+
+For detailed troubleshooting steps, refer to the [Troubleshooting Guide](https://github.com/nodejs/node-addon-api/blob/main/doc/troubleshooting.md).
+
+---
+
+## 9. Example Configuration Snippet
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myaddon",
+      "sources": ["src/myaddon.cc"],
+      "dependencies": [
+        "<!@(node -p \"require('node-addon-api').targets\") : node_addon_api_except"
+      ],
+      "defines": [ "NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS" ],
+      "conditions": [
+        ["OS=='mac'", {
+          "cflags+": ["-fvisibility=hidden"],
+          "xcode_settings": {
+            "GCC_SYMBOLS_PRIVATE_EXTERN": "YES"
+          }
+        }]
+      ]
+    }
+  ]
+}
+```
+
+This configuration enables C++ exception integration, prevents fatal process termination on unthrowable exceptions, and sets macOS visibility flags.
+
+---
+
+## 10. Additional Resources
+
+- [Installation Instructions](https://github.com/nodejs/node-addon-api/blob/main/doc/install-instructions.md)
+- [node-gyp Documentation](https://github.com/nodejs/node-gyp/blob/main/README.md)
+- [Prebuild Tools Overview](https://github.com/nodejs/node-addon-api/blob/main/doc/prebuild_tools.md)
+- [Error Handling Guide](https://github.com/nodejs/node-addon-api/blob/main/doc/error_handling.md)
+- [Troubleshooting Guide](https://github.com/nodejs/node-addon-api/blob/main/doc/troubleshooting.md)
+
+
+---
+
+By carefully following these setup and build integration steps, you’ll unlock node-addon-api’s powerful, stable C++ interface for native Node.js addon development with confidence and predictability.

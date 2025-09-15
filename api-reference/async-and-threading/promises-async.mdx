@@ -1,0 +1,228 @@
+---
+title: "Promises and Asynchronous Patterns"
+description: "Details the use of JavaScript Promises in native addons via node-addon-api. Explains creating, resolving, and rejecting promises, and integration with async C++ code."
+---
+
+# Promises and Asynchronous Patterns
+
+Explore how to leverage JavaScript Promises within native Node.js addons using **node-addon-api**. This guide empowers you to seamlessly create, resolve, reject, and chain promises in C++ and integrate them with asynchronous workflows, unlocking efficient, non-blocking native modules.
+
+---
+
+## 1. Introduction to Promises in Native Addons
+
+Modern JavaScript extensively uses Promises to handle asynchronous behavior. Integrating Promises into native addons enhances interoperability and allows native code to participate naturally in JS async patterns.
+
+With **node-addon-api**, you interact with `Promise` objects and associated methods directly, making it straightforward to expose asynchronous C++ operations as native JavaScript Promises.
+
+### Why Use Promises in Native Addons?
+
+- **Cleaner asynchronous code**: Simplifies complex callback chains.
+- **Better interoperability**: Aligns native code with JS idioms.
+- **Improved error handling**: Centralizes async error propagation via `.catch`.
+- **Composability**: Supports chaining and combining async results.
+
+---
+
+## 2. Creating and Resolving Promises
+
+The `Promise` class in node-addon-api allows you to create new promise objects and control their resolutions explicitly.
+
+### Creating a Promise
+
+Use the `Promise::Deferred` object to create a new Promise whose outcome you will control:
+
+```cpp
+Napi::Env env = ...;  // Current environment
+Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+
+// Return the Promise to JavaScript
+return deferred.Promise();
+```
+
+### Resolving a Promise
+
+When your asynchronous operation completes successfully, resolve the promise:
+
+```cpp
+deferred.Resolve(Napi::String::New(env, "success message"));
+```
+
+### Rejecting a Promise
+
+If the operation fails, reject it with an error:
+
+```cpp
+deferred.Reject(Napi::Error::New(env, "failure reason").Value());
+```
+
+### Example: Wrapping an Asynchronous Operation with Promise
+
+```cpp
+Napi::Value DoAsyncOperation(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  auto deferred = Napi::Promise::Deferred::New(env);
+
+  // Simulate async operation (e.g. via uv_queue_work or std::async)
+  std::thread([deferred]() mutable {
+    // perform work...
+    bool success = true; // simulate
+    if (success) {
+      deferred.Resolve(Napi::String::New(deferred.Env(), "Done successfully"));
+    } else {
+      deferred.Reject(Napi::Error::New(deferred.Env(), "Operation failed").Value());
+    }
+  }).detach();
+
+  return deferred.Promise();
+}
+```
+
+---
+
+## 3. Checking and Handling Promises
+
+node-addon-api lets you recognize and manipulate promise objects within your native code.
+
+### Checking for Promises
+
+The `Promise::IsPromise` function allows you to identify if a value is a Promise.
+
+```cpp
+bool isPromise = Napi::Promise::IsPromise(value);
+```
+
+### Using Promise Methods
+
+You can invoke `.then` and `.catch`-like methods on native created Promises through JavaScript code, allowing chaining and handling fulfillment or rejection.
+
+---
+
+## 4. Integrating Promises With Asynchronous C++ Code
+
+Native async operations must not block the main thread. Using Promises with async helpers ensures smooth integration with JS's event loop.
+
+### Example: Using Promises with AsyncWorker or AsyncProgressWorker
+
+Implement your worker thread task to signal completion via promise resolution or rejection.
+
+```cpp
+class PromiseAsyncWorker : public Napi::AsyncWorker {
+  Napi::Promise::Deferred deferred;
+
+public:
+  PromiseAsyncWorker(Napi::Env env) : AsyncWorker(env), deferred(Napi::Promise::Deferred::New(env)) { }
+
+  void Execute() override {
+    // perform the actual async work here
+  }
+
+  void OnOK() override {
+    deferred.Resolve(Napi::String::New(Env(), "Success"));
+  }
+
+  void OnError(const Napi::Error& e) override {
+    deferred.Reject(e.Value());
+  }
+
+  Napi::Promise GetPromise() { return deferred.Promise(); }
+};
+
+Napi::Value RunAsyncWorkerWithPromise(const Napi::CallbackInfo& info) {
+  PromiseAsyncWorker* worker = new PromiseAsyncWorker(info.Env());
+  worker->Queue();
+  return worker->GetPromise();
+}
+```
+
+### Best Practice
+
+- Always return the `Promise` object immediately.
+- Use `AsyncWorker` or similar abstractions to run background work.
+- Resolve or reject the promise inside callback overrides.
+
+---
+
+## 5. Handling Promise Chains and Callbacks
+
+You can also create native methods that accept JavaScript callbacks and return Promises that reflect the chained operations.
+
+### Defining Callback Functions in Promises
+
+```cpp
+Napi::Value ThenMethodOnFulfilled(const Napi::CallbackInfo& info) {
+  auto onFulfilled = info[0].As<Napi::Function>();
+  auto promise = someExistingPromise       
+    .Then(onFulfilled);  // then() returns a new Promise
+  return promise;
+}
+```
+
+The returned value is a Promise that JavaScript code can chain on.
+
+### Catch Method for Rejections
+
+You can also intercept promise rejections:
+
+```cpp
+Napi::Value CatchMethod(const Napi::CallbackInfo& info) {
+  auto onRejected = info[0].As<Napi::Function>();
+  auto caughtPromise = someExistingPromise.Catch(onRejected);
+  return caughtPromise;
+}
+```
+
+---
+
+## 6. Common Patterns and Usage Tips
+
+- Always verify input arguments are valid JavaScript functions when expected.
+- Prefer `Napi::Promise::Deferred` for promise creation; avoid direct low-level napi calls.
+- Cleanly reject promises on asynchronous errors for consistent JS error handling.
+- Use `.Then()` and `.Catch()` to bridge native promises with JS callbacks.
+
+---
+
+## 7. Practical Example: Promises in Action
+
+The `test/promise.js` test demonstrates how node-addon-api's promise interface works under various conditions:
+
+- Checking if objects are promises.
+- Resolving and rejecting promises.
+- Correct promise environment association.
+- Using `.then` with fulfilled and rejected callbacks.
+- Using `.catch` for error handling.
+
+This test suite validates the robustness of the promise implementation and can serve as an example integration reference.
+
+---
+
+## 8. Troubleshooting Common Promise Issues
+
+<Tip>
+If your native code returns a Promise but JavaScript never resolves or rejects it, check your async execution path to ensure the Deferred's `Resolve` or `Reject` is always called.
+</Tip>
+
+<Warning>
+Avoid blocking the main thread before Promise resolution, as this can deadlock operations and stall the event loop.
+</Warning>
+
+<Note>
+Ensure all JS callbacks and Promise handlers are executed on the correct environment (`Napi::Env`), especially when crossing threads.
+</Note>
+
+---
+
+## 9. Related Documentation
+
+- [AsyncWorkers and Execution Models](/api-reference/async-and-threading/async-workers): Learn how to implement async workers that work seamlessly with Promises.
+- [Threadsafe Functions](/api-reference/async-and-threading/threadsafe-functions): Use threadsafe callbacks with native async code.
+- [Error Handling and Exception Propagation](/api-reference/error-handling-lifecycle/error-exceptions): Handle errors effectively within Promises and async workflows.
+
+---
+
+## 10. Summary
+
+Using Promises in native addons with node-addon-api enables you to produce clean, predictable asynchronous integrations with JavaScript. By following the demonstrated patterns of creating, resolving, rejecting, and chaining promises, you provide a smooth developer experience for consuming your native functionalities in modern JavaScript applications.
+
+---

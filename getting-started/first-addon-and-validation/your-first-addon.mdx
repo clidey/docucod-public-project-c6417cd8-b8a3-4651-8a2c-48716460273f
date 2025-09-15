@@ -1,0 +1,190 @@
+---
+title: "Creating Your First Addon"
+description: "Guides users in authoring their first C++ addon by leveraging node-addon-api wrapper classes, with clear code samples. Explains how to structure your addon, export functions, and provides references to core patterns."
+---
+
+# Creating Your First Addon
+
+This guide is designed to walk you through authoring your first C++ native addon using the **node-addon-api** wrapper classes. You will learn how to structure your addon, export functions to JavaScript, and explore a working example to see these concepts in action.
+
+---
+
+## 1. Understanding the Addon Structure
+
+Your addon is a native Node.js module written in C++ that exposes functions and objects to JavaScript. The **node-addon-api** library simplifies this process by providing C++ wrapper classes over the Node-API C interface.
+
+### Key Concepts
+
+- **Addon Class**: Create a subclass of `Napi::Addon<T>` where `T` is your addon class.
+- **Environment and Exports**: Your constructor receives `Napi::Env env` (the JavaScript environment) and `Napi::Object exports` (the object to which you attach your addon’s functions).
+- **DefineAddon**: Use `DefineAddon` to expose instance methods or values on the exports object.
+
+### Why use `Napi::Addon`?
+
+It provides an environment-aware, thread-safe way to manage per-instance data, ensuring your addon can be loaded multiple times safely.
+
+<Callout type="info">
+It's critical to avoid static variables for data storage in your addon, as each environment or thread may load your addon separately.
+</Callout>
+
+---
+
+## 2. Step-by-Step: Writing Your First Addon
+
+Follow these steps to author your first addon, exposing increment and decrement operations:
+
+<Steps>
+<Step title="Create the C++ Addon Class">
+
+Write a new C++ class that inherits from `Napi::Addon<YourAddonName>`.
+
+```cpp
+#include <napi.h>
+
+class ExampleAddon : public Napi::Addon<ExampleAddon> {
+ public:
+  ExampleAddon(Napi::Env env, Napi::Object exports) {
+    DefineAddon(exports, {
+      InstanceMethod("increment", &ExampleAddon::Increment),
+      InstanceValue("subObject", DefineProperties(Napi::Object::New(env), {
+        InstanceMethod("decrement", &ExampleAddon::Decrement)
+      }), napi_enumerable)
+    });
+  }
+
+ private:
+  Napi::Value Increment(const Napi::CallbackInfo& info) {
+    return Napi::Number::New(info.Env(), ++value);
+  }
+
+  Napi::Value Decrement(const Napi::CallbackInfo& info) {
+    return Napi::Number::New(info.Env(), --value);
+  }
+
+  uint32_t value = 42;
+};
+```
+
+This class defines two instance methods: `increment` (attached directly on the addon) and `decrement` (attached inside a nested sub-object).
+
+</Step>
+<Step title="Register the Addon with Node.js">
+
+Use the macro `NODE_API_ADDON` to register your addon class so Node.js knows how to instantiate it.
+
+```cpp
+NODE_API_ADDON(ExampleAddon)
+```
+
+This macro expands to the correct initialization functions expected by Node.js.
+
+</Step>
+<Step title="Compile Your Addon">
+
+Set up your `binding.gyp` file to include `node-addon-api` and enable C++ exceptions if desired (recommended).
+
+```json
+{
+  "targets": [
+    {
+      "target_name": "example_addon",
+      "sources": ["src/example_addon.cc"],
+      "include_dirs": ["<!(node -p \"require('node-addon-api').include_dir\")"],
+      "dependencies": [
+        "<!(node -p \"require('node-addon-api').targets\")"
+      ],
+      "cflags!": ["-fno-exceptions"],
+      "cflags_cc!": ["-fno-exceptions"],
+      "defines": ["NAPI_CPP_EXCEPTIONS"]
+    }
+  ]
+}
+```
+
+After creating the file, build your addon using:
+
+```bash
+node-gyp configure build
+```
+
+</Step>
+<Step title="Use Your Addon from JavaScript">
+
+Load and test your addon:
+
+```js
+'use strict';
+
+const exampleAddon = require('bindings')('example_addon');
+
+console.log(exampleAddon.increment());      // Outputs: 43
+console.log(exampleAddon.increment());      // Outputs: 44
+console.log(exampleAddon.subObject.decrement()); // Outputs: 43
+```
+
+This simple interface shows how your native increment and decrement methods operate on an internal variable retained in your addon instance.
+
+</Step>
+</Steps>
+
+---
+
+## 3. Detailed Code Explanation
+
+- **Constructor Arguments**: The constructor receives `env` and `exports`. Modify `exports` to attach your methods or create custom objects.
+- **DefineAddon Usage**: This attaches methods (`InstanceMethod`) and values (`InstanceValue`) to the exports object with the correct access flags.
+- **Instance Methods**: All methods receive `Napi::CallbackInfo` giving you access to the current environment and arguments.
+- **Internal State**: The variable `value` is a private member storing state unique to each addon instance.
+
+
+---
+
+## 4. Best Practices
+
+- **Exception Handling**: Enable C++ exceptions for easier error propagation using the `node_addon_api_except` dependency in your `binding.gyp`.
+- **Avoid Global State**: Store data as instance members in your `Napi::Addon` subclass to prevent concurrency problems across threads.
+- **Use `InstanceValue` for Nested Objects**: This provides a clean way to bundle related methods under sub-objects.
+- **Use `napi_enumerable` for Public Methods**: Makes your properties visible and accessible in JavaScript loops and introspection.
+
+---
+
+## 5. Common Pitfalls & Troubleshooting
+
+<AccordionGroup title="Common Issues">
+<Accordion title="Addon Fails to Build">
+- Verify that your `binding.gyp` correctly includes `node-addon-api` and proper flags.
+- Ensure you run `node-gyp configure build` from your project root.
+</Accordion>
+<Accordion title="Methods Are Undefined in JS">
+- Confirm that `DefineAddon` correctly attaches methods to the exports object.
+- Check that `NODE_API_ADDON` macro is correctly used.
+</Accordion>
+<Accordion title="Multiple Instances Have Conflicting States">
+- Avoid static or global variables for storing internal state.
+- Keep data inside the addon instance.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 6. Next Steps
+
+- Explore the [Running and Using Your Addon](getting-started/first-addon-and-validation/running-addon) guide for integration testing.
+- Learn about [Configuring Your Build Environment](getting-started/setup-basics/configuring-build) to customize build settings.
+- Dive into the [Error Handling & Exception Propagation](guides/advanced-best-practices/error-handling) guide to master error flows.
+
+---
+
+## 7. References and Further Reading
+
+- [Addon Structure](doc/addon.md)
+- [Setup and Installation Instructions](getting-started/setup-basics/install-instructions)
+- [Node-Gyp Build Tool](doc/node-gyp.md)
+- [node-addon-api API Documentation](doc/README.md)
+- [node-addon-examples GitHub Repository](https://github.com/nodejs/node-addon-examples) — practical examples
+
+---
+
+Your journey into native addon development begins now. By leveraging the power of **node-addon-api**, you benefit from a stable, convenient C++ interface tightly integrated with Node.js's runtime environment.
+
+Start simple, iterate fast, and unlock performance gains and seamless integration for your Node.js applications.

@@ -1,0 +1,184 @@
+---
+title: "Error and Exception Handling"
+description: "Learn how node-addon-api supports C++ exception semantics, unifying JavaScript error propagation with familiar C++ try/catch patterns. Explore best practices for robust error boundaries between C++ and JS."
+---
+
+# Error and Exception Handling
+
+Understanding error handling within **node-addon-api** is vital for creating reliable and maintainable native addons. This guide focuses on how **node-addon-api** supports native C++ exception semantics that unify JavaScript error propagation with familiar C++ try/catch patterns, ensuring robust error boundaries between C++ and JavaScript.
+
+---
+
+## Why Error and Exception Handling Matters
+
+When your C++ addon encounters an error, it must properly communicate this to the JavaScript environment. Mismanaged errors can crash the Node.js process or cause silent failures. **node-addon-api** bridges this gap by integrating C++ exception semantics with JavaScript exceptions, enabling developers to write clear, maintainable, and safe native code.
+
+
+## Exception Semantics in node-addon-api
+
+### Unified C++ and JavaScript Exception Model
+
+- **With C++ exceptions enabled:** you can throw and catch exceptions in a way familiar to C++ developers using try/catch blocks.
+- Exceptions thrown in C++ that derive from `Napi::Error` seamlessly convert into JavaScript exceptions on return to JS.
+- Exceptions thrown in JavaScript functions called from native code are automatically converted into C++ exceptions of type `Napi::Error`.
+
+This integration simplifies error handling, allowing you to treat native and JS errors uniformly.
+
+### Handling Non-`Napi::Error` Exceptions
+
+- Using the `node_addon_api_except` dependency lets you catch only exceptions of type `Napi::Error`.
+- Using `node_addon_api_except_all` extends this to catch **all** C++ exceptions gracefully:
+  - Exceptions derived from `std::exception` create an `Napi::Error` with the `what()` message.
+  - Other exceptions generate a generic `Napi::Error`.
+
+### Without C++ Exceptions Enabled
+
+- **node-addon-api** gracefully supports environments where C++ exceptions are disabled.
+- In this mode, calls return `Maybe` types that encapsulate success or failure.
+- The addon code must then check for errors explicitly with `Maybe::To` or check `env.IsExceptionPending()`.
+- JavaScript exceptions are propagated by setting a pending exception on the `Napi::Env` and returning early from native callbacks.
+
+---
+
+## Practical Patterns and Usage
+
+### Throwing Exceptions in Native Code
+
+Whether you are throwing a classic C++ exception or a JavaScript exception, your code should immediately exit after throwing to avoid undefined states.
+
+```cpp
+// Throwing a Node-API Exception (with C++ exceptions enabled)
+Napi::Env env = ...;
+throw Napi::Error::New(env, "Example native exception");
+```
+
+```cpp
+// Throwing a JavaScript exception (without C++ exceptions enabled)
+Napi::Env env = ...;
+Napi::Error::New(env, "Example JS exception").ThrowAsJavaScriptException();
+return;
+```
+
+### Catching Exceptions in Native Code (C++ Exceptions Enabled)
+
+Wrap calls to JavaScript or risky code with `try/catch` to handle exceptions.
+
+```cpp
+try {
+  Napi::Value result = jsFunctionThatThrows({ arg1, arg2 });
+  // Continue with normal execution
+} catch (const Napi::Error& e) {
+  std::cerr << "Caught JavaScript exception: " << e.what() << std::endl;
+  // Handle or recover from the error
+}
+```
+
+### Handling JavaScript Exceptions Without C++ Exceptions
+
+Check `Maybe` types and pending exceptions:
+
+```cpp
+Napi::Env env = ...;
+Napi::Function jsFunctionThatThrows = ...;
+Maybe<Napi::Value> maybeResult = jsFunctionThatThrows({ arg1, arg2 });
+Napi::Value result;
+if (!maybeResult.To(&result)) {
+  // Exception is pending
+  return env.GetAndClearPendingException();
+}
+```
+
+### Using Throw Macros for Node-API Return Status
+
+**node-addon-api** provides macros to facilitate throwing errors based on `napi_status` results with uniform semantics.
+
+- `NAPI_THROW(e, ...)`: Throws a `Napi::Error` and returns a value.
+- `NAPI_THROW_IF_FAILED(env, status, ...)`: Throws if status indicates failure.
+- `NAPI_THROW_IF_FAILED_VOID(env, status)`: Throws and returns void.
+
+Use these macros to keep your native code clean and consistent.
+
+---
+
+## Example: Catching Standard Exceptions and Propagating to JavaScript
+
+The following snippet demonstrates how your addon can throw and propagate standard C++ exceptions by integrating with **node-addon-api**’s exception wrap layer.
+
+```cpp
+#include <stdexcept>
+#include "napi.h"
+
+using namespace Napi;
+
+void ThrowStdException(const CallbackInfo& info) {
+  std::string message = info[0].As<String>().Utf8Value();
+  throw std::runtime_error(message);
+}
+
+void ThrowPrimitiveException(const CallbackInfo&) {
+  throw 0;  // Throws a primitive int exception
+}
+
+Object Init(Env env, Object exports) {
+  exports.Set("throwStdException", Napi::Function::New(env, ThrowStdException));
+  exports.Set("throwPrimitiveException", Napi::Function::New(env, ThrowPrimitiveException));
+  return exports;
+}
+
+NODE_API_MODULE(addon, Init)
+```
+
+In this example:
+
+- `ThrowStdException` throws a `std::runtime_error` which **node-addon-api** will catch and convert to a JS exception with the error message.
+- `ThrowPrimitiveException` throws a primitive exception (an `int`), which is caught and wrapped as a generic error message in JS if using `node_addon_api_except_all`.
+
+---
+
+## Best Practices and Tips
+
+- **Always clean up properly** before throwing exceptions — avoiding leaks and corrupted state.
+- Catch exceptions in your native code when you can handle or log them.
+- Use the `node_addon_api_except_all` dependency to support generic exception translation.
+- When exceptions are disabled, rigorously check `Maybe` return types and pending exceptions.
+- Avoid throwing primitives as exceptions; prefer throwing `Napi::Error` or derived exceptions.
+
+---
+
+## Troubleshooting Common Issues
+
+<AccordionGroup title="Common Exception Handling Pitfalls">
+<Accordion title="Addon Crashes on Native Exception">
+If your addon crashes instead of propagating an exception, ensure you are using the correct `node-addon-api` dependency in `binding.gyp`:
+
+- Use `node_addon_api_except_all` to handle all C++ exceptions.
+- Confirm C++ exceptions are enabled in your build environment (check compiler flags).
+</Accordion>
+<Accordion title="JavaScript Sees No Exception on Native Throw">
+When disabling C++ exceptions, your C++ code must check for pending exceptions with `env.IsExceptionPending()` and react accordingly.
+
+Returning early after setting a JavaScript exception is crucial.
+</Accordion>
+<Accordion title="Uncaught Primitive Exceptions (e.g. Integers)">
+Throwing primitives like `int` may not produce helpful JS exceptions.
+
+Use `node_addon_api_except_all` to wrap these or prefer explicitly throwing `Napi::Error`.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Additional Resources
+
+Explore these linked documents to deepen your understanding and effectively configure exception handling:
+
+- [Setup and Build System Integration](../../api-reference/integration-build/setup-build) - How to enable C++ exceptions in your build environment.
+- [Error Handling and Exception Propagation](../../api-reference/error-handling-lifecycle/error-exceptions) - API-centric reference.
+- [Env Management and Lifecycle](../../api-reference/error-handling-lifecycle/env-management) - Working with `Napi::Env` and exceptions.
+- [node-gyp Build Configuration](../../getting-started/setup-basics/configuring-build) - Manage compiler flags for exceptions.
+
+---
+
+With these concepts and practices, you will create native addons that handle errors cleanly and integrate safely with JavaScript environments.
+
+---

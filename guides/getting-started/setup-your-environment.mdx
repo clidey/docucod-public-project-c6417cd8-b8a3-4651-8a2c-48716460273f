@@ -1,0 +1,233 @@
+---
+title: "Set Up Your Environment"
+description: "Learn how to configure your development environment for node-addon-api, including Node.js requirements, installation steps, and toolchain setup on various platforms. This guide lays a robust foundation for all addon development."
+---
+
+# Set Up Your Environment
+
+## Overview
+
+This guide walks you through configuring your development environment for using **node-addon-api** effectively. It covers the essential Node.js version requirements, installation steps, build tool configuration, and platform-specific considerations. Following these steps will establish a solid foundation for building and maintaining native addons with node-addon-api.
+
+---
+
+## 1. Prerequisites
+
+Before setting up your environment, ensure you have the following ready:
+
+- **Node.js:** Install a supported version of Node.js that includes Node-API (typically active LTS versions).
+- **Build Tools:** Depending on your platform, appropriate build tools are required to compile native addons:
+  - Windows: Visual Studio with C++ workload
+  - macOS: Xcode Command Line Tools
+  - Linux: GCC/G++ and related build essentials
+- **node-gyp:** The de-facto build tool for native addons. Installation and usage instructions are available in [node-gyp documentation](./node-gyp.md).
+
+<Tip>
+Verify your Node.js version by running `node -v`. Active LTS versions guarantee ABI stability needed for node-addon-api.
+</Tip>
+
+---
+
+## 2. Installation Steps
+
+### 2.1 Add node-addon-api to Your Project
+
+1. Open your project directory.
+2. Add the `node-addon-api` dependency to your `package.json` under `dependencies`:
+
+```json
+{
+  "dependencies": {
+    "node-addon-api": "*"
+  }
+}
+```
+
+3. Run `npm install` to fetch the package.
+
+### 2.2 Configure Your Build
+
+You must declare node-addon-api as a dependency in your addon's `binding.gyp` build configuration.
+
+#### Without C++ Exceptions
+
+Add this to your `binding.gyp` dependencies:
+
+```gyp
+{
+  'dependencies': [
+    "<!(node -p \"require('node-addon-api').targets\"):node_addon_api"
+  ]
+}
+```
+
+#### With C++ Exception Support
+
+If your addon needs integration between C++ and JavaScript exception handling, choose one of these options:
+
+- Catch only exceptions derived from `Napi::Error`:
+
+```gyp
+{
+  'dependencies': [
+    "<!(node -p \"require('node-addon-api').targets\"):node_addon_api_except"
+  ]
+}
+```
+
+- Catch all native C++ exceptions:
+
+```gyp
+{
+  'dependencies': [
+    "<!(node -p \"require('node-addon-api').targets\"):node_addon_api_except_all"
+  ]
+}
+```
+
+#### Enabling Safe API Type Guards Without Exceptions
+
+If exceptions are not enabled but you want additional runtime safety, use:
+
+```gyp
+{
+  'dependencies': [
+    "<!(node -p \"require('node-addon-api').targets\"):node_addon_api_maybe"
+  ]
+}
+```
+
+<Tip>
+These configurations correspond to different `targets` defined in `node_addon_api.gyp`. Choose according to your error handling strategy.
+</Tip>
+
+### 2.3 MacOS Specific Compiler Settings
+
+If building on macOS, add these conditions to `binding.gyp` to manage symbol visibility and reduce linker warnings:
+
+```gyp
+{
+  'conditions': [
+    ['OS=="mac"', {
+      'cflags+': ['-fvisibility=hidden'],
+      'xcode_settings': {
+        'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES'
+      }
+    }]
+  ]
+}
+```
+
+---
+
+## 3. Toolchain and Platform Setup
+
+### 3.1 Windows
+
+- Install [Visual Studio](https://visualstudio.microsoft.com/) with the C++ Desktop workload.
+- Install Python 3.x (required by node-gyp).
+- Configure environment variables appropriately.
+
+### 3.2 macOS
+
+- Install Xcode Command Line Tools:
+  ```bash
+  xcode-select --install
+  ```
+- Ensure `node-gyp` is installed globally or locally.
+
+### 3.3 Linux
+
+- Install build essentials and Python:
+  ```bash
+  sudo apt-get install build-essential python3
+  ```
+
+### 3.4 node-gyp Installation
+
+You can install node-gyp globally:
+
+```bash
+npm install -g node-gyp
+```
+
+---
+
+## 4. Include node-addon-api in Your Native Code
+
+Your native C++ addon code must include only `napi.h` to ensure ABI stability:
+
+```cpp
+#include "napi.h"
+```
+
+Avoid including headers such as `node.h`, `nan.h`, or `v8.h`.
+
+---
+
+## 5. Build and Verify
+
+After configuring `binding.gyp` and writing your code:
+
+1. Run `node-gyp configure` to generate build files.
+2. Build your addon with `node-gyp build`.
+3. Confirm the addon builds without errors.
+
+<Tip>
+Use npm scripts to simplify build steps, e.g., set "install": "node-gyp rebuild" in your `package.json`.
+</Tip>
+
+---
+
+## 6. Advanced Preprocessor Flags (Optional)
+
+You may want to customize certain build behaviors via preprocessor directives:
+
+- `NODE_ADDON_API_DISABLE_DEPRECATED` prevents deprecated APIs from being included.
+- `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` avoids fatal process termination on unthrowable exceptions.
+- `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` disables convenience helpers in finalizers for better performance.
+
+Define these in your build configuration or environment variables where applicable.
+
+---
+
+## 7. Troubleshooting Common Setup Issues
+
+<AccordionGroup title="Troubleshooting Tips">
+<Accordion title="Build Fails on Missing `node-gyp` or Python">
+Ensure `node-gyp` is installed and in your system PATH. Also, Python version should be 3.x as required by `node-gyp`.
+</Accordion>
+<Accordion title="Symbol Visibility Errors on macOS">
+Verify the `binding.gyp` includes macOS visibility flags as described above to avoid linker warnings/errors.
+</Accordion>
+<Accordion title="C++ Exception Handling Issues">
+Make sure dependencies in `binding.gyp` correspond to your exception handling needs and that compilers support exception flags.
+</Accordion>
+<Accordion title="Addon Fails to Load at Runtime">
+Check Node.js version compatibility and whether node-addon-api is installed as a dependency correctly.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 8. Best Practices and Tips
+
+- Always pin `node-addon-api` version in your `package.json` for reproducible builds.
+- Use active LTS Node.js versions for ABI stability guarantees.
+- Leverage CI environments to automate build verification across platforms.
+- Consult the official [node-gyp documentation](./node-gyp.md) for detailed build tool usage.
+
+---
+
+## 9. Helpful References
+
+- [node-gyp Official Docs](./node-gyp.md)
+- [Node-API Exception Handling](../concepts/architecture-overview/exception-handling.md)
+- [Setup Prerequisites and System Requirements](../getting-started/setup-basics/system-requirements.md)
+- [Configuring Your Build Environment](../getting-started/setup-basics/configuring-build.md)
+- [Prebuild Tools for Distribution](./prebuild_tools.md)
+
+
+---
+
+By completing these steps, your environment will be fully prepared to develop robust Node.js native addons using node-addon-api, optimized for stability and maintainability across platforms.

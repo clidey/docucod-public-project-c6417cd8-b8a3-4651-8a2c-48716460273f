@@ -1,0 +1,188 @@
+---
+title: "Prerequisites and System Requirements"
+description: "Covers the essential prerequisites for node-addon-api, including supported Node.js versions, compiler and tool requirements, and supported operating systems. Ensures that users know exactly what is needed before starting installation."
+---
+
+# Prerequisites and System Requirements
+
+This page provides a clear overview of the essential prerequisites and system requirements to successfully build and use **node-addon-api**. Understanding these requirements ensures a smooth setup and integration experience before starting development.
+
+---
+
+## 1. Supported Node.js Versions
+
+- **Minimum Node.js Version:** Node.js v10 or later is required to support the Node-API and node-addon-api.
+- The **Node-API version** corresponds to your Node.js runtime. You can verify your Node.js version and the Node-API version by running:
+
+```bash
+node -p "process.versions.node"
+node -p "process.versions.napi"
+```
+
+- The node-addon-api package supports all actively maintained Node.js versions that include ABI stable Node-API support.
+
+
+## 2. Supported Operating Systems
+
+node-addon-api works on the three major platforms supported by Node.js:
+
+- **Linux**
+- **macOS**
+- **Windows**
+
+There are platform-specific compiler and build considerations, especially regarding macOS, which requires additional build flag settings to manage symbol visibility.
+
+
+## 3. Compiler and Build Tool Requirements
+
+### Key Build Tools
+
+- **node-gyp**: The primary native build system for compiling Node.js addons written in C++.
+  - node-gyp manages configurations through the `binding.gyp` file.
+  - Installation and usage details are available in the [node-gyp documentation](https://github.com/nodejs/node-gyp).
+
+### Compiler Support
+
+- A C++11 compatible compiler is required:
+  - **Windows:** Visual Studio 2017 or later with Desktop development workload
+  - **macOS:** Xcode 9 or later
+  - **Linux:** GCC 5 or later or Clang
+
+### Build Flags and Configurations
+
+- The project enforces strict compiler warnings and errors such as `-Wall`, `-Wextra`, `-Werror`, and `-Wunused-parameter`.
+- For macOS, these additional `cflags` are necessary to prevent symbol export issues:
+
+```gyp
+'conditions': [
+  ['OS=="mac"', {
+    'cflags+': ['-fvisibility=hidden'],
+    'xcode_settings': {
+      'OTHER_CFLAGS': ['-fvisibility=hidden']
+    }
+  }]
+]
+```
+
+- This configuration ensures proper symbol visibility and compatibility with OS X loaders.
+
+
+## 4. Dependency and Environment Requirements
+
+- **Node.js Native Addon Build Tools:** You must have [node-gyp](https://github.com/nodejs/node-gyp), Python 2.7 or Python 3.x, and relevant build tools installed (e.g., make, MSBuild).
+- **Python:** Required for node-gyp to run.
+- **C++ Standard Library:** The C++ ABI and standard libraries on your platform must support C++11 features.
+- **Environment Variables:** Occasionally, environment variables such as `NAPI_VERSION` and `npm_config_disable_deprecated` can override defaults; these must be set with care.
+
+
+## 5. Practical Verification
+
+Before starting your project, verify your system meets the following:
+
+- **Node.js version check:** 
+
+```bash
+node -v
+```
+
+- **Node-API version check:** 
+
+```bash
+node -p "process.versions.napi"
+```
+
+- **node-gyp version:** 
+
+```bash
+node-gyp -v
+```
+
+- **Compiler availability:** 
+
+```bash
+# example on Linux/macOS
+g++ --version
+
+# example on Windows (using Developer Command Prompt)
+cl
+```
+
+
+## 6. Best Practices and Common Pitfalls
+
+- Using outdated compilers not compatible with C++11 can result in build failures.
+- Ensure `node-gyp` is installed globally or locally and correctly configured with Python and your compiler toolchain.
+- On macOS, do not skip the visibility flags; omission will cause build/link errors.
+- Keep your Node.js version current to leverage the latest stable Node-API features.
+
+
+## 7. Summary
+
+By meeting these prerequisites and system requirements, you establish a solid foundation for building native addons using node-addon-api. This preparation avoids common build blockers and compatibility issues.
+
+For detailed installation instructions and build environment configuration, proceed to the [Installation Instructions](../install-instructions) and [Configuring Your Build Environment](../configuring-build) pages.
+
+
+---
+
+## Troubleshooting Tips
+
+<AccordionGroup title="Common Prerequisite Issues">
+<Accordion title="Node.js Version Is Too Low">
+Ensure you are running Node.js version 10 or higher. Use `node -v` to check your version. Upgrade Node.js if needed.
+</Accordion>
+<Accordion title="Compiler Missing or Unsupported">
+Verify that your system’s compiler supports C++11:
+
+- On macOS/Linux, running `g++ --version` or `clang++ --version` should return version details.
+- On Windows, open the Developer Command Prompt and run `cl` to confirm Visual Studio compiler access.
+
+If missing, install the appropriate tools:
+- Windows: Visual Studio with C++ workload
+- macOS: Xcode Command Line Tools (`xcode-select --install`)
+- Linux: Install GCC or Clang packages
+</Accordion>
+<Accordion title="node-gyp Setup Failures">
+- Confirm Python is installed and accessible (version 2.7 or 3.x).
+- Configure node-gyp using this command if necessary:
+
+  ```bash
+  npm install -g node-gyp
+  ```
+
+- On some systems, environment variables like `PYTHON` must point to python executable.
+</Accordion>
+<Accordion title="Build Failures on macOS Related to Symbol Visibility">
+Ensure your `binding.gyp` contains the macOS-specific visibility flags:
+
+```gyp
+'conditions': [
+  ['OS=="mac"', {
+    'cflags+': ['-fvisibility=hidden'],
+    'xcode_settings': {
+      'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',
+      'OTHER_CFLAGS': ['-fvisibility=hidden']
+    }
+  }]
+]
+```
+
+Omitting these will cause hard-to-diagnose build or runtime errors.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Additional Resources
+
+- [node-gyp Documentation](https://github.com/nodejs/node-gyp): Setup and usage details for the native addon build tool.
+- [Node.js Official Site](https://nodejs.org/): Download and install supported Node.js versions.
+- [Node-API Versioning](../integration-build/api-versioning-support): Understand supported Node-API versions per Node.js release.
+- [Installation Instructions](../install-instructions): Next steps for installing node-addon-api in your project.
+
+
+---
+
+<Check>
+Ensure your environment meets all these prerequisites before proceeding with your node-addon-api project setup for a smooth development experience.
+</Check>

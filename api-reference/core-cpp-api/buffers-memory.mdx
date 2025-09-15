@@ -1,0 +1,302 @@
+---
+title: "Buffers, Arrays, and Memory Management"
+description: "Documents C++ APIs for handling Node.js Buffers, ArrayBuffers, DataViews, and memory-sensitive structures. Explains safe memory sharing, handling external memory, and management functions to avoid leaks or corruption."
+---
+
+# Buffers, Arrays, and Memory Management
+
+This documentation covers the C++ APIs provided by **node-addon-api** for handling Node.js Buffer, ArrayBuffer, and related memory-sensitive structures. Understanding these APIs enables seamless and safe sharing, management, and lifetime control of binary data between native code and JavaScript.
+
+---
+
+## Overview
+
+Working efficiently with binary data is critical in native addons, especially for performance-sensitive or system-level interactions. The `Napi::Buffer`, `Napi::ArrayBuffer`, and related classes are designed to wrap native memory for access in JavaScript, with careful memory management strategies to avoid leaks, crashes, or premature deallocation.
+
+This page focuses on how to safely share memory, wrap external data, use finalizers to manage lifecycle, and handle special cases like ArrayBuffer detachment.
+
+---
+
+## Buffer Class (`Napi::Buffer`)
+
+The `Napi::Buffer` class creates a JavaScript-visible projection of raw native data (typed as `T`). It extends `Napi::Uint8Array` internally to expose `Buffer` functionality.
+
+### Key Features
+
+- Create instances owning their own memory or wrapping external memory.
+- Manage the lifecycle of external memory with finalizers.
+- Support copying external data into managed buffers.
+
+### Creating Buffers
+
+#### New Buffer with Allocated Memory
+```cpp
+static Napi::Buffer<T> Napi::Buffer::New(napi_env env, size_t length);
+```
+- Allocates a new buffer of `length` elements.
+- Returns a `Buffer` instance fully managed by the engine.
+
+#### Wrapping External Memory Without Finalizer
+> Requires external buffers support enabled (`NODE_API_NO_EXTERNAL_BUFFERS_ALLOWED` **not** defined).
+
+```cpp
+static Napi::Buffer<T> Napi::Buffer::New(napi_env env, T* data, size_t length);
+```
+- Wraps an existing native memory pointer.
+- Does **not** take ownership; the external data must remain valid during the buffer’s lifetime.
+- No callback is invoked on destruction.
+
+#### Wrapping External Memory With Finalizer
+
+```cpp
+template <typename Finalizer>
+static Napi::Buffer<T> Napi::Buffer::New(napi_env env, T* data, size_t length, Finalizer finalizeCallback);
+```
+- Allows passing a callback (`Finalizer`) that frees or cleans up external data when the buffer is garbage collected.
+- Prevents memory leaks by tying native resource cleanup to JavaScript object lifetime.
+
+#### With Finalizer and Hint
+```cpp
+template <typename Finalizer, typename Hint>
+static Napi::Buffer<T> Napi::Buffer::New(napi_env env, T* data, size_t length, Finalizer finalizeCallback, Hint* finalizeHint);
+```
+- Adds a `finalizeHint` pointer passed to the finalizer callback.
+- Useful to provide additional context or data at cleanup.
+
+### Copying External Data
+
+- `Copy` allocates new buffer memory and copies from external data.
+
+```cpp
+static Napi::Buffer<T> Napi::Buffer::Copy(napi_env env, const T* data, size_t length);
+```
+- Produces a fully-owned buffer untouched by the source's lifecycle.
+
+### NewOrCopy Methods
+
+- These methods create a buffer wrapping external data if supported, or allocate and copy data otherwise.
+- With finalizer variants available; if external buffers are unsupported, the finalizer is called immediately after copying.
+
+### Accessors
+
+- `T* Data() const` — Access the raw pointer to the data.
+- `size_t Length() const` — Number of elements in the buffer.
+
+### Usage Recommendations
+
+- Prefer finalizer variants when wrapping external data needing cleanup.
+- Use `NewOrCopy` for best compatibility across runtimes.
+- Always verify buffer data and length in native checks to prevent invalid memory access.
+
+---
+
+## ArrayBuffer Class (`Napi::ArrayBuffer`)
+
+The `Napi::ArrayBuffer` corresponds to JavaScript's `ArrayBuffer`, exposing raw binary data with fewer type constraints than `Buffer`.
+
+### Creating ArrayBuffers
+
+#### Allocated ArrayBuffer
+
+```cpp
+static Napi::ArrayBuffer Napi::ArrayBuffer::New(napi_env env, size_t byteLength);
+```
+- Allocates a new ArrayBuffer instance with `byteLength` bytes.
+
+#### Wrapping External Data
+
+- Wrapping external memory is available only if external buffers are allowed (no `NODE_API_NO_EXTERNAL_BUFFERS_ALLOWED` defined).
+- Several overloads accept finalizers similar to `Buffer`:
+
+```cpp
+static Napi::ArrayBuffer New(napi_env env, void* externalData, size_t byteLength);
+
+template <typename Finalizer>
+static Napi::ArrayBuffer New(napi_env env, void* externalData, size_t byteLength, Finalizer finalizeCallback);
+
+template <typename Finalizer, typename Hint>
+static Napi::ArrayBuffer New(napi_env env, void* externalData, size_t byteLength, Finalizer finalizeCallback, Hint* finalizeHint);
+```
+
+### Important Operations
+
+- `void* Data() const` — Pointer to underlying data.
+- `size_t ByteLength() const` — Size of the array buffer.
+- `void Detach()` — Detaches the ArrayBuffer, invalidating data and length.
+- `bool IsDetached() const` — Tests if the buffer has been detached.
+
+### Detach Handling
+
+- Detaching ArrayBuffers is supported starting from N-API version 7.
+- Native code can detach ArrayBuffers explicitly or respond to detachment performed from JavaScript.
+- After detachment, data pointer becomes `nullptr` and length is zero — always check these to avoid invalid access.
+
+---
+
+## Safe Memory Sharing and Management
+
+Sharing memory between C++ and JavaScript requires clear ownership rules to prevent corruption or leaks:
+
+- When wrapping **static or long-lived memory** with no need to free, use external buffers **without** finalizers.
+- Use **finalizers** to automatically clean native data when buffers are GC’d.
+- When targeting multiple runtimes, consider disabling external buffers by defining `NODE_API_NO_EXTERNAL_BUFFERS_ALLOWED` — then buffers are copied instead.
+  - Use `NewOrCopy` methods for compatibility.
+
+### Finalizers Best Practices
+
+- Finalizers receive environment and data pointers; use them to release memory safely.
+- If finalizer hints are useful (e.g., additional context), always use the hint-enabled overloads.
+- Be cautious about thread-safety inside finalizers since GC calls them asynchronously.
+
+### Common Pitfalls
+
+- Providing raw pointers without lifetime guarantees causes use-after-free bugs.
+- Not freeing externally allocated memory leads to leaks.
+- Using external buffers with unsupported runtimes triggers errors; use `NewOrCopy` to avoid.
+
+---
+
+## Example Usage Patterns
+
+Below are typical scenarios native addon developers encounter with memory buffers.
+
+### Allocating a Managed Buffer
+
+```cpp
+// Create a buffer with 1024 elements of uint8_t
+Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, 1024);
+// Use buffer.Data() and buffer.Length() to access and manipulate
+```
+
+### Wrapping External Data With Cleanup
+
+```cpp
+uint8_t* data = new uint8_t[512];
+
+Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(
+  env,
+  data,
+  512,
+  [](Napi::Env /*env*/, uint8_t* data) {
+    delete[] data;  // Clean up when GC'd
+  }
+);
+```
+
+### Creating or Copying External Buffer (Compatibility)
+
+```cpp
+uint8_t* data = GetExternalData();
+
+Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::NewOrCopy(
+  env,
+  data,
+  length,
+  [](Napi::Env /*env*/, uint8_t* data) {
+    // Finalizer callback if supported
+    FreeExternalData(data);
+  }
+);
+```
+
+### Checking Buffers in Native Code
+
+```cpp
+void CheckBuffer(const Napi::CallbackInfo& info) {
+  if (!info[0].IsBuffer()) {
+    Napi::Error::New(info.Env(), "A buffer was expected.").ThrowAsJavaScriptException();
+    return;
+  }
+  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  if (buffer.Length() != expectedLength) {
+    Napi::Error::New(info.Env(), "Incorrect buffer length.").ThrowAsJavaScriptException();
+    return;
+  }
+  // Additional data verification can be done here
+}
+```
+
+---
+
+## Memory Management Utilities
+
+- `MemoryManagement::AdjustExternalMemory` allows informing Node.js about externally allocated memory, helping GC heuristics to manage addon memory pressure.
+
+Example:
+
+```cpp
+int64_t change = 1024 * 1024;  // 1 MiB
+MemoryManagement::AdjustExternalMemory(env, change);
+```
+
+Use this method when your addon allocates or frees significant external memory not tracked by Node.js.
+
+---
+
+## Troubleshooting Common Issues
+
+<AccordionGroup title="Common Memory & Buffer Issues">
+<Accordion title="Buffer Ownership and Lifetime Problems">
+
+**Problem:** Using a Buffer wrapping external data that is freed or invalidated before GC.
+
+**Solution:** Always supply a finalizer to clean up external memory or copy data into fully owned buffers.
+
+</Accordion>
+<Accordion title="External Buffers Not Supported by Runtime">
+
+**Problem:** Compilation errors or runtime errors about external buffers when using Electron or restricted runtimes.
+
+**Solution:** Define `NODE_API_NO_EXTERNAL_BUFFERS_ALLOWED` to disable external buffers and use `NewOrCopy` methods that fallback to copying data.
+
+</Accordion>
+<Accordion title="ArrayBuffer Detaching Unexpected Behavior">
+
+**Problem:** After detaching an ArrayBuffer, data pointer is `nullptr` and length is zero, causing crashes.
+
+**Solution:** Always check `IsDetached()` before accessing `Data()` and `ByteLength()`. Use `Detach()` only when appropriate.
+
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Related Documentation
+
+- [Buffer Class Reference](./buffer.md) — Full API reference for `Napi::Buffer`.
+- [ArrayBuffer Class Reference](./array_buffer.md) — API details on `Napi::ArrayBuffer`.
+- [External Buffer Compatibility](./external_buffer.md) — Guidance on runtime compatibility and enabling/disabling external buffers.
+- [Memory Management and Object Lifetimes](../guides/advanced-best-practices/memory-management-guide.mdx) — Best practices on memory handling.
+
+---
+
+## Summary
+
+Working with buffers and binary data in native addons requires careful memory sharing and ownership management. The APIs presented here provide flexible ways to create, wrap, and manage native memory, ensuring safe interoperability with JavaScript and effective resource cleanup.
+
+Utilize finalizers wherever possible to prevent leaks and use compatibility-friendly methods to handle multiple runtimes gracefully.
+
+## Code Example: Creating an External Buffer with Finalizer
+```cpp
+#include <napi.h>
+
+Napi::Value CreateManagedBuffer(const Napi::CallbackInfo& info) {
+  uint8_t* data = new uint8_t[256];
+  // Initialize data as needed
+
+  Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(
+    info.Env(),
+    data,
+    256,
+    [](Napi::Env /*env*/, uint8_t* data) {
+      delete[] data;
+    }
+  );
+
+  return buffer;
+}
+```
+
+This pattern guarantees that when `buffer` is garbage collected, the allocated memory is safely released.
+
+---

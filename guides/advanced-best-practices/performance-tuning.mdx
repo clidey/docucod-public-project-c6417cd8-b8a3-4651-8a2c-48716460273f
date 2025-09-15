@@ -1,0 +1,247 @@
+---
+title: "Performance Optimization for Native Modules"
+description: "Actionable tips and checklists for diagnosing and optimizing performance in node-addon-api-based modules, focusing on low-overhead interfaces, async designs, and memory efficiency."
+---
+
+# Performance Optimization for Native Modules
+
+This guide provides actionable strategies and checklists focused on diagnosing and improving the performance of native modules built with **node-addon-api**. It centers on leveraging low-overhead interfaces, designing efficient asynchronous operations, and optimizing memory usage to deliver high-performance addons that integrate seamlessly with Node.js.
+
+---
+
+## 1. Understanding Performance Bottlenecks in Native Modules
+
+Native modules are designed to extend Node.js capabilities with C++ code, but inefficiencies can arise when crossing the JS-C++ boundary or managing async tasks and memory.
+
+### Common Performance Pain Points
+- Excessive overhead calling C++ functions from JavaScript
+- Synchronous operations blocking the main event loop
+- Inefficient data transfer or memory management
+- Improper async design causing thread contention or leaks
+
+By recognizing these issues early, you can focus your optimization efforts where they matter most.
+
+---
+
+## 2. Prerequisites
+
+Before proceeding, ensure:
+
+- Your project uses **node-addon-api** as the C++ wrapper for Node-API.
+- You have a working native addon environment configured according to the Setup guide ([Setup](../getting-started/setup-basics/install-instructions)).
+- Benchmarking tools or a performance test protocol is in place (see [benchmark README](benchmark/README.md)).
+- Familiarity with asynchronous patterns in node-addon-api (refer to [Async Patterns guide](guides/core-patterns/async-patterns)).
+
+---
+
+## 3. Key Performance Optimization Areas
+
+### 3.1 Minimize Overhead in JS-C++ Interactions
+
+The transition between JavaScript and C++ code has inherent overhead. To reduce it:
+
+- Prefer lightweight native methods that do not perform expensive operations on every call.
+- Avoid unnecessary boxing/unboxing of values; use direct Napi types where possible.
+- Cache frequently used values or property descriptors rather than recreating them.
+
+**Example:**
+```javascript
+// Caching property descriptors to avoid repeated allocations
+Napi::PropertyDescriptor desc = Napi::PropertyDescriptor::Accessor(
+    env, constructor.Value(), "cachedProperty", GetterFunction);
+```
+
+### 3.2 Design Asynchronous APIs Thoughtfully
+
+Blocking the Node.js main thread cripples app responsiveness. Adopt the following:
+
+- Use `Napi::AsyncWorker` for executing heavy computations off the main thread.
+- Implement thread-safe callbacks using `ThreadSafeFunction` when cross-thread JS invocation is needed.
+- Release native resources promptly after async operations complete.
+
+Refer to [Async Patterns](guides/core-patterns/async-patterns) for detailed workflows.
+
+### 3.3 Manage Memory Efficiently
+
+Memory pressure affects performance and stability:
+
+- Use references and weak references properly to manage lifetimes.
+- Avoid memory leaks by ensuring finalizers clean up native resources.
+- Use `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` to opt into basic finalizers that improve performance by avoiding complicated helpers.
+
+Practice disciplined allocation and deallocation of native buffers and objects.
+
+---
+
+## 4. Checklist for Performance Optimization
+
+Use this checklist as a guide for evaluating and improving your native module:
+
+- [ ] Are native calls optimized for minimal work per call?
+- [ ] Do you minimize passing large objects or complex data structures between JS and C++?
+- [ ] Are all long-running operations offloaded to async workers or threads?
+- [ ] Is `ThreadSafeFunction` used appropriately to prevent contention?
+- [ ] Are native resources and memory explicitly freed or finalized?
+- [ ] Have you enabled `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` if you do not need complex finalizers?
+- [ ] Are exceptions handled using the minimal necessary overhead (exceptions enabled only if needed)?
+- [ ] Have you benchmarked your addon to identify hotspots? (see `benchmark/` directory)
+
+---
+
+## 5. Step-by-Step Performance Optimization Workflow
+
+<Steps>
+<Step title="Profile Your Addon">
+Start by benchmarking your module using the existing `benchmark` scripts to identify slow operations.
+
+**Action:**
+- Run `npm run benchmark` from the root directory.
+- Use the `--benchmarks` flag to isolate specific tests.
+
+**Outcome:**
+You will discover which APIs or operations consume the most time.
+</Step>
+
+<Step title="Reduce JS-C++ Call Frequency">
+Refactor to batch operations or reduce the number of C++ calls in hot paths.
+
+**Action:**
+- Aggregate data processing if possible.
+- Cache native method results when valid.
+
+**Outcome:**
+Fewer expensive calls crossing runtime boundaries.
+</Step>
+
+<Step title="Optimize Async Operations">
+Convert any synchronous blocking work into asynchronous tasks using `Napi::AsyncWorker` or worker threads.
+
+**Action:**
+- Identify blocking C++ functions.
+- Implement `AsyncWorker` subclasses or use thread-safe functions for callback communication.
+
+**Outcome:**
+Main Node.js thread remains responsive.
+</Step>
+
+<Step title="Manage Memory and Finalizers">
+Enable basic finalizers to optimize cleanup or implement custom finalizers where appropriate.
+
+**Action:**
+- Define `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS` in your build configuration if suitable.
+- Verify that native resources are freed reliably during GC.
+
+**Outcome:**
+Reduced memory leaks, faster GC, and better addon stability.
+</Step>
+
+<Step title="Benchmark and Validate Improvements">
+Re-run benchmarks and tests to verify performance gains.
+
+**Action:**
+- Compare benchmark results before and after changes.
+- Monitor memory usage and CPU utilization with profiling tools.
+
+**Outcome:**
+Concrete validation of performance improvements.
+</Step>
+</Steps>
+
+---
+
+## 6. Practical Examples
+
+### Example: Using Async Worker to Offload CPU-intensive Task
+```cpp
+class HeavyComputationWorker : public Napi::AsyncWorker {
+ public:
+  HeavyComputationWorker(Napi::Function& callback)
+    : Napi::AsyncWorker(callback) {}
+
+  void Execute() override {
+    // Perform computation here without blocking main thread
+    result = PerformHeavyCalculation();
+  }
+
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    Callback().Call({ Env().Null(), Napi::Number::New(Env(), result) });
+  }
+
+ private:
+  int result;
+};
+```
+
+### Example: Enabling Basic Finalizers
+
+Add the following to your `binding.gyp` to optimize finalizers:
+
+```gyp
+'defines': ['NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS'],
+```
+
+This reduces overhead caused by convenience helpers during GC finalization.
+
+---
+
+## 7. Troubleshooting Common Performance Issues
+
+<AccordionGroup title="Common Performance Troubleshooting">
+<Accordion title="High CPU Usage on Small Calls">
+**Cause:** Frequent JS-to-C++ boundary crossings with trivial logic.
+
+**Solution:** Batch operations or consolidate calls into fewer, larger tasks.
+</Accordion>
+
+<Accordion title="Async Tasks Blocking Event Loop">
+**Cause:** Using synchronous native APIs or not offloading work in async workers.
+
+**Solution:** Implement `Napi::AsyncWorker` or use worker threads for all heavy tasks.
+</Accordion>
+
+<Accordion title="Memory Leaks after Repeated Calls">
+**Cause:** Missing or incorrect finalizers; unreleased native resources.
+
+**Solution:** Ensure proper use of destructors and register finalizers; enable `NODE_ADDON_API_REQUIRE_BASIC_FINALIZERS`.
+</Accordion>
+
+<Accordion title="Slow Property Accessors">
+**Cause:** Creating new property descriptors or JS wrappers on each access.
+
+**Solution:** Cache descriptors and objects instead of recreating every time.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 8. Best Practices and Tips
+
+- **Keep Native Functions Small:** Avoid large work on every entry; offload as needed.
+- **Use Exceptions Judiciously:** Enabling C++ exceptions adds overhead. Disable if you do not catch C++ exceptions.
+- **Prebuild Addons:** Use prebuild tools ([Prebuild tools](doc/prebuild_tools.md)) to distribute optimized binaries.
+- **Keep ABI Stable:** Target appropriate Node-API versions for best performance and compatibility.
+- **Testing Under Load:** Always benchmark in conditions similar to production to catch bottlenecks.
+
+---
+
+## 9. Additional Resources and Related Documentation
+
+- [Setup and Build System Integration](api-reference/integration-build/setup-build)
+- [Async Workers and Execution Models](api-reference/async-and-threading/async-workers)
+- [Threadsafe Functions and Safe Cross-Thread Calls](api-reference/async-and-threading/threadsafe-functions)
+- [Memory Management & Object Lifetimes](guides/advanced-best-practices/memory-management-guide)
+- [Prebuild Tools for Distribution](doc/prebuild_tools.md)
+- [Benchmarking Native Modules](benchmark/README.md)
+
+---
+
+This page fits within the advanced best practices and performance tuning documentation, building upon foundational setup, async programming, and memory management topics.
+
+For a guided approach to starting a native addon, see [Creating Your First Addon](guides/getting-started/create-your-first-addon).
+
+For troubleshooting build or runtime issues, see [Troubleshooting Setup Issues](getting-started/troubleshooting/troubleshooting-guide).
+
+---
+
+*Empower your native modules by systematically eliminating bottlenecks and embracing efficient async and memory management patterns to deliver seamless, high-performance Node.js extensions.*

@@ -1,0 +1,243 @@
+---
+title: "Installation Instructions"
+description: "Step-by-step guide for installing node-addon-api via npm and integrating it into your C++ addon project. Includes considerations for Windows, macOS, and Linux, preparing users to get the library and header-only modules properly in place."
+---
+
+# Installation Instructions for node-addon-api
+
+This guide provides a clear, hands-on walkthrough to install the **node-addon-api** package via npm and integrate it into your C++ native addon project. It addresses key details for Windows, macOS, and Linux platforms, ensuring you prepare your project environment correctly with the necessary files and dependencies.
+
+---
+
+## 1. Prerequisites
+
+Before beginning the installation, ensure your environment meets the following prerequisites:
+
+- **Node.js**
+  - Install the latest LTS version of Node.js from the official website: [https://nodejs.org/](https://nodejs.org/)
+- **C++ Build Tools**
+  - On Windows: Install [windows-build-tools](https://github.com/felixrieseberg/windows-build-tools) or Visual Studio with C++ workload.
+  - On macOS: Ensure Command Line Tools for Xcode are installed (`xcode-select --install`).
+  - On Linux: Install `build-essential`, `python`, and required compiler toolchain.
+- **Build System**
+  - You must use either **node-gyp** (default) or **cmake-js** as your build tool.
+- **Project Setup**
+  - Basic knowledge of managing `package.json` and writing `binding.gyp` or `CMakeLists.txt` files is expected.
+
+<Tip>
+Check the "Prerequisites and System Requirements" page for detailed environment validation steps and platform-specific tips.
+</Tip>
+
+---
+
+## 2. Installing node-addon-api via npm
+
+1. Open your project folder where your native addon will live.
+2. Run the command:
+```bash
+npm install node-addon-api
+```
+This installs node-addon-api as a dependency and makes the header-only C++ wrapper available for your build.
+
+3. Confirm installation is successful. The package will be listed in your `package.json` dependencies and `node_modules/node-addon-api` will exist.
+
+<Check>
+Run `npm install` again anytime dependencies change to keep node-addon-api installed.
+</Check>
+
+---
+
+## 3. Configuring Your Build with node-gyp
+
+Native addons written in C++ require a build configuration file, typically `binding.gyp`. Here's how to include node-addon-api correctly.
+
+### Minimal `binding.gyp` configuration example:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myAddon",
+      "sources": ["src/my_addon.cc"],
+
+      // Include node-addon-api headers
+      "dependencies": [
+        "<!(node -p \"require('node-addon-api').targets\") : node_addon_api"
+      ],
+
+      // Optional: define macros to enable C++ exceptions handling
+      // 'defines': [ 'NAPI_CPP_EXCEPTIONS' ],
+
+      // For macOS, add the recommended flags to reduce symbol visibility
+      "conditions": [
+        [ "OS=='mac'", {
+          "cflags+": ["-fvisibility=hidden"],
+          "xcode_settings": {
+            "GCC_SYMBOLS_PRIVATE_EXTERN": "YES"
+          }
+        } ]
+      ]
+    }
+  ]
+}
+```
+
+### Key points:
+- Use the dynamic command to add node-addon-api as a dependency so that headers are properly referenced.
+- Enable C++ exceptions only if your addon will handle native exceptions.
+- MacOS requires additional flags for symbol visibility as shown.
+- Your source `.cc` files must include `#include "napi.h"` but **must not** include V8 or nan headers.
+
+<Info>
+If you want to support catching all C++ exceptions (not just `Napi::Error`), replace the dependency as follows:
+
+```gyp
+"dependencies": [
+  "<!(node -p \"require('node-addon-api').targets\") : node_addon_api_except_all"
+],
+```
+</Info>
+
+---
+
+## 4. For cmake-js Users
+
+If you prefer using [CMake.js](https://github.com/cmake-js/cmake-js), adjust your `CMakeLists.txt` accordingly:
+
+```cmake
+# Specify NAPI_VERSION
+add_definitions(-DNAPI_VERSION=3)
+
+# Optional: Enable C++ exceptions for Napi::Error
+add_definitions(-DNODE_ADDON_API_CPP_EXCEPTIONS)
+
+# Include the node-addon-api header directory (adjust path accordingly)
+include_directories(${CMAKE_SOURCE_DIR}/node_modules/node-addon-api)
+
+# Define your target and source files
+add_library(myAddon SHARED src/my_addon.cc)
+
+# Link necessary Node.js libraries
+# ... additional configurations as needed
+```
+
+See the cmake-js README for expanded configuration examples and troubleshooting.
+
+---
+
+## 5. Including Headers in Your Source Code
+
+In your C++ source files, include the node-addon-api header as follows:
+
+```cpp
+#include "napi.h"
+```
+
+This inclusion grants you access to the C++ wrapper classes needed for Node-API development.
+
+<Warning>
+Do not include `node.h`, `nan.h`, or `v8.h` in any addon source files to maintain ABI stability and compatibility.
+</Warning>
+
+---
+
+## 6. Verifying Your Installation and Build
+
+After configuring and building your addon, verify that node-addon-api is correctly integrated by:
+
+1. Building your project:
+
+```bash
+node-gyp configure build
+```
+
+or,
+
+```bash
+cmake-js compile
+```
+
+2. Running your addon in Node.js and confirming it loads without errors:
+
+```bash
+node -e "require('./build/Release/myAddon')"
+```
+
+3. Checking for compiler warnings or errors related to missing node-addon-api headers.
+
+<Check>
+If the build fails to find `napi.h`, confirm that your `binding.gyp` or `CMakeLists.txt` properly references the include path exposed by node-addon-api.
+</Check>
+
+---
+
+## 7. Platform-Specific Considerations
+
+### Windows
+
+- Ensure you have installed the Visual Studio C++ workload or windows-build-tools.
+- Use the same PowerShell or Command Prompt session to run npm install and node-gyp commands.
+- Confirm that Python 2.7 or Python 3.x (compatible with node-gyp) is correctly set up.
+
+### macOS
+
+- Install Xcode Command Line Tools.
+- Add the macOS visibility flags as shown in the `binding.gyp` example above.
+
+### Linux
+
+- Install build-essential, python, and other required build dependencies.
+- Use GCC version compatible with your Node.js version.
+
+---
+
+## 8. Troubleshooting Common Issues
+
+<AccordionGroup title="Common Installation Issues">
+<Accordion title="Header file 'napi.h' not found">
+- Verify that `node-addon-api` is installed in your `node_modules`.
+- Check that the `binding.gyp` contains the dependency line for `node_addon_api`.
+- Clean the build by running `node-gyp clean` and rebuild.
+</Accordion>
+<Accordion title="Build fails on Windows with Visual Studio errors">
+- Confirm appropriate C++ build tools are installed.
+- Run `npm config set msvs_version 2017` (or your Visual Studio version).
+- Ensure environment variables point to the correct MSBuild paths.
+</Accordion>
+<Accordion title="Unexpected symbol visibility errors on macOS">
+- Add the recommended macOS compiler flags in your `binding.gyp` to use `-fvisibility=hidden`.
+- Ensure Xcode command line tools are up to date.
+</Accordion>
+<Accordion title="Exception handling problems">
+- Confirm if your addon enables or disables C++ exceptions.
+- Match your build configuration in `binding.gyp` or `CMakeLists.txt` to your exception handling preferences.
+- Use exact dependency variants like `node_addon_api_except` if you want exceptions.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 9. Next Steps
+
+Once installation and integration are complete, you can move on to:
+
+- **Configuring Your Build Environment**: Customize your addon build flags and setup in more depth.
+- **Creating Your First Addon**: Develop a simple native addon using node-addon-api wrappers.
+- **Running and Using Your Addon**: Test your module in Node.js with JavaScript integration.
+
+Refer to the related documentation pages for detailed workflows.
+
+---
+
+## Additional Resources
+
+- [node-addon-api Official GitHub Repository](https://github.com/nodejs/node-addon-api)
+- [node-gyp Documentation](https://github.com/nodejs/node-gyp#readme)
+- [CMake.js Documentation](https://github.com/cmake-js/cmake-js)
+- [Node.js Native Addons Guide](https://nodejs.org/api/addons.html)
+- [ABI Stability Guide](https://nodejs.org/en/docs/guides/abi-stability/)
+
+
+---
+
+This guide empowers you to successfully install and configure `node-addon-api` in your native C++ addon projects across platforms, enabling smooth native extension development with modern C++ wrappers and ABI stability guarantees.
