@@ -1,0 +1,344 @@
+---
+title: "Object and Property Management"
+description: "Details how to create, wrap, manipulate, and manage JavaScript objects using the C++ API. Explains object properties, wrapping C++ classes as JS objects, property descriptors, references, and advanced object lifetime management."
+---
+
+# Object and Property Management
+
+This page details how to create, wrap, manipulate, and manage JavaScript objects using the C++ API in **node-addon-api**. It explains core concepts such as object properties, wrapping C++ classes as JavaScript objects, property descriptors, references, and advanced object lifetime management.
+
+---
+
+## Overview
+
+JavaScript objects are fundamental data structures that native C++ addons frequently interact with. The `Napi::Object` class provides a comprehensive C++ interface to construct, modify, and manage JavaScript objects directly within native code.
+
+Working with `Napi::Object` enables you to:
+- Create new JavaScript objects in the native environment.
+- Access and manipulate properties programmatically.
+- Define custom property descriptors that control property attributes.
+- Wrap C++ native classes as JavaScript objects (`ObjectWrap`) for rich interoperable behavior.
+- Manage object lifetime and resource cleanup via finalizers and references.
+
+Mastering object management empowers you to seamlessly bridge your C++ logic with JavaScript applications, offering flexibility and precise control over native addon behavior.
+
+---
+
+## Creating and Manipulating JavaScript Objects
+
+### Creating Objects
+
+Use `Napi::Object::New(env)` to create a new empty JavaScript object within a given environment.
+
+```cpp
+Napi::Object obj = Napi::Object::New(env);
+```
+
+Alternatively, wrap an existing JavaScript value handle with the `Napi::Object` constructor:
+
+```cpp
+Napi::Object obj(env, existingNapiValue);
+```
+
+### Setting and Getting Properties
+
+Use the `Set()` and `Get()` methods to add or retrieve properties:
+
+```cpp
+obj.Set("name", "NodeAddon");
+Napi::Value name = obj.Get("name");
+```
+
+Property keys can be strings, numbers (`uint32_t`), or other Napi values.
+
+### Checking and Deleting Properties
+
+- `Has(key)` returns whether an object has a property named `key` (including prototype chain).
+- `HasOwnProperty(key)` returns whether the object itself owns the property.
+- `Delete(key)` deletes the property named `key` from the object.
+
+Example:
+
+```cpp
+if (obj.Has("count")) {
+  obj.Delete("count");
+}
+```
+
+### Property Enumeration
+
+Use `GetPropertyNames()` to retrieve enumerable property names as a JavaScript array:
+
+```cpp
+Napi::Array keys = obj.GetPropertyNames();
+```
+
+### Operator Overloads for Convenience
+
+The `operator[]` is overloaded to enable get/set access with familiar syntax:
+
+```cpp
+obj["prop"] = Napi::Number::New(env, 123);
+Napi::Value val = obj["prop"];
+```
+
+This supports string and numeric keys and works like the bracket notation in JavaScript.
+
+---
+
+## Wrapping C++ Classes as JavaScript Objects with `ObjectWrap`
+
+To expose a C++ class as a native JavaScript class:
+
+1. Subclass `Napi::ObjectWrap<T>` where `T` is your C++ class.
+2. Define methods and accessors as instance methods using `InstanceMethod` and `InstanceAccessor` descriptors.
+3. Use `DefineClass` to create a JavaScript constructor function for the class.
+4. Bind the constructor to exports for JavaScript to instantiate.
+
+### Example
+
+```cpp
+class Example : public Napi::ObjectWrap<Example> {
+  public:
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    Example(const Napi::CallbackInfo& info);
+    Napi::Value GetValue(const Napi::CallbackInfo& info);
+    Napi::Value SetValue(const Napi::CallbackInfo& info);
+
+  private:
+    double _value;
+};
+
+Napi::Object Example::Init(Napi::Env env, Napi::Object exports) {
+  Napi::Function func = DefineClass(env, "Example", {
+    InstanceMethod<&Example::GetValue>("GetValue"),
+    InstanceMethod<&Example::SetValue>("SetValue")
+  });
+  exports.Set("Example", func);
+  return exports;
+}
+
+Example::Example(const Napi::CallbackInfo& info) :
+  Napi::ObjectWrap<Example>(info) {
+  _value = info[0].As<Napi::Number>().DoubleValue();
+}
+
+Napi::Value Example::GetValue(const Napi::CallbackInfo& info) {
+  return Napi::Number::New(info.Env(), _value);
+}
+
+Napi::Value Example::SetValue(const Napi::CallbackInfo& info) {
+  _value = info[0].As<Napi::Number>().DoubleValue();
+  return GetValue(info);
+}
+```
+
+JavaScript usage:
+
+```js
+const { Example } = require('bindings')('addon');
+const instance = new Example(10);
+console.log(instance.GetValue()); // prints 10
+instance.SetValue(20);
+console.log(instance.GetValue()); // prints 20
+```
+
+### Notes on ObjectWrap
+
+- The wrapped C++ object lifetime is tied to the JavaScript object’s garbage collection.
+- C++ destructor may run deferred after JavaScript GC.
+- Use persistent references in `DefineClass` to distinguish prototype calls from instances.
+
+---
+
+## Property Descriptors and Defining Properties
+
+Use `Napi::PropertyDescriptor` to define properties with custom attributes such as getters, setters, methods, and constants.
+
+### Defining Properties
+
+- `DefineProperty(propertyDescriptor)` defines a single property.
+- `DefineProperties(list_of_propertyDescriptors)` defines multiple properties.
+
+Example defining an accessor and a method:
+
+```cpp
+obj.DefineProperty(Napi::PropertyDescriptor::Accessor("name", GetterFunction, SetterFunction));
+obj.DefineProperty(Napi::PropertyDescriptor::Function("doSomething", NativeFunction));
+```
+
+You can craft descriptors with attributes like `napi_writable`, `napi_enumerable`, and `napi_configurable` to control property behavior.
+
+---
+
+## References and Lifetime Management
+
+### References
+
+`Napi::Reference<T>` creates a counted reference to a JavaScript object of type `T`.
+
+- Holding a reference prevents the object from being garbage-collected.
+- `Ref()` increments reference count, `Unref()` decrements.
+- When count reaches zero, object becomes eligible for GC.
+
+Use persistent references when objects must survive beyond current scopes.
+
+### Finalizers
+
+You can associate native data with JavaScript objects and specify finalizer callbacks to run when objects are garbage collected:
+
+```cpp
+obj.AddFinalizer(finalizeCallback, nativeData);
+```
+
+Or with an additional hint:
+
+```cpp
+obj.AddFinalizer(finalizeCallback, nativeData, finalizeHint);
+```
+
+Finalizers let you clean up native resources tied to JS objects reliably.
+
+---
+
+## Object Lifetime and Handle Scopes
+
+Handles to JavaScript objects are managed within scopes:
+
+- By default, handles live for the duration of the native method call.
+- You can create additional `Napi::HandleScope` or `Napi::EscapableHandleScope` for narrower lifespan control, avoiding excess memory usage in loops or blocks.
+- Use `EscapableHandleScope::Escape()` to promote a handle to an outer scope.
+
+Example using `HandleScope` in a loop:
+
+```cpp
+for (size_t i = 0; i < count; ++i) {
+  Napi::HandleScope scope(env);
+  Napi::Value val = Napi::String::New(env, "item" + std::to_string(i));
+  // process val
+}
+```
+
+This confines handles to each iteration, improving memory efficiency.
+
+---
+
+## Iterating Over Object Properties
+
+If C++ exceptions are enabled, `Napi::Object` supports iteration over enumerable properties via iterators:
+
+```cpp
+for (const auto& entry : obj) {
+  Napi::Value key = entry.first;
+  Napi::Value value = entry.second;
+  // use key and value
+}
+```
+
+Iterators provide an intuitive way to traverse keys and values, similar to JavaScript’s `for...in` or `Object.entries()`.
+
+---
+
+## Freezing and Sealing Objects
+
+Starting with Node-API version 8, you can control object extensibility:
+
+- `Freeze()` prevents adding/removing properties and changes.
+- `Seal()` prevents adding/removing properties but allows modifying existing writable properties.
+
+These mirror the behavior of JavaScript's [`Object.freeze`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze) and [`Object.seal`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/seal).
+
+Example:
+
+```cpp
+obj.Freeze();
+```
+
+---
+
+## Practical Tips and Best Practices
+
+- **Always manage handle lifetimes carefully** with `HandleScope` to avoid memory leaks.
+- **Wrap native objects with `ObjectWrap`** to cleanly bind JS and C++ lifetimes.
+- Use **property descriptors** to expose getters, setters, and methods with controlled attributes.
+- Use **finalizers** to release native resources when JavaScript objects are GC’d.
+- When iterating, prefer **object iterators** if exceptions are enabled for clarity and safety.
+- Check property existence with `Has()` vs `HasOwnProperty()` depending on prototype access needs.
+
+---
+
+## Troubleshooting Common Issues
+
+### Objects Behaving Unexpectedly
+
+- Ensure you are managing references correctly to prevent premature garbage collection.
+- Incorrect use of `HandleScope` can cause dangling handles or leaks.
+
+### Properties Not Visible or Writable
+
+- Verify property attributes (`writable`, `enumerable`, `configurable`) are set as intended in property descriptors.
+
+### Unexpected Destructor Delays
+
+- Remember `ObjectWrap` destruction runs asynchronously after GC. Do not rely on immediate destructors after returning from JS.
+
+### Iteration Errors
+
+- Iterators require exceptions enabled (`NAPI_CPP_EXCEPTIONS`).
+- If exceptions are disabled, use explicit property keys retrieval and indexed access instead.
+
+---
+
+## Example: Comprehensive Object Manipulation
+
+```cpp
+#include <napi.h>
+
+Napi::Object CreateAndSetupObject(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Create a new object
+  Napi::Object obj = Napi::Object::New(env);
+
+  // Set properties
+  obj.Set("answer", 42);
+  obj.Set("greeting", "hello");
+
+  // Define a read-only accessor property
+  obj.DefineProperty(Napi::PropertyDescriptor::Accessor(
+    env,
+    obj,
+    "time",  // property name
+    [](const Napi::CallbackInfo& info) -> Napi::Value { // getter
+      return Napi::Date::New(info.Env(), std::time(nullptr) * 1000);
+    },
+    nullptr,  // no setter
+    napi_property_attributes::napi_enumerable
+  ));
+
+  // Check for property
+  if (obj.Has("answer")) {
+    Napi::Number answer = obj.Get("answer").As<Napi::Number>();
+    // Increment the answer
+    obj.Set("answer", answer.Int32Value() + 1);
+  }
+
+  return obj;
+}
+```
+
+This example creates an object, sets simple properties, defines a read-only accessor, and conditionally updates a property.
+
+---
+
+## Related Documentation and References
+
+- [Napi::Object class reference](object.md) — Complete API for Object handling
+- [Napi::ObjectWrap tutorial](object_wrap.md) — For wrapping C++ classes as JS objects
+- [Handling property descriptors](property_descriptor.md) — How to use property descriptors
+- [Object lifetime management](object_lifetime_management.md) — Handle scopes, finalizers, and references
+- [Examples repository](https://github.com/nodejs/node-addon-examples) — Practical use cases for object and property management
+
+---
+
+> Empower your native addons by mastering JavaScript object manipulation with `node-addon-api`. Whether creating new objects, wrapping native C++ instances, or controlling property behaviors, this page equips you with the essential tools and best practices to create seamless and efficient integrations.
