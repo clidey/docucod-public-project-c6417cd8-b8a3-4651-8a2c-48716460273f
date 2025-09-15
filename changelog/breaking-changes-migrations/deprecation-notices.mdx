@@ -1,0 +1,149 @@
+---
+title: "Deprecation Notices"
+description: "Find out which functions, features, or behaviors have been deprecated, the recommended alternatives, and their planned removal timelines. This keeps users informed about forward-looking updates to maintain healthy codebases."
+---
+
+# Deprecation Notices
+
+Stay informed about deprecated features within the **node-addon-api**, including which functions and behaviors to avoid and recommended alternatives. This guide helps you maintain a healthy and future-proof codebase by understanding planned removals and migration pathways.
+
+---
+
+## What Is Deprecation in node-addon-api?
+
+Deprecation signals that certain APIs, features, or behaviors are scheduled for removal in a future release. While deprecated features continue to work currently, relying on them risks future incompatibilities and loss of support. Staying current reduces maintenance burdens and ensures compatibility with newer Node.js versions.
+
+---
+
+## Currently Deprecated Features
+
+### 1. `include` and `gyp` Properties in the `index.js` Module
+
+- **What is Deprecated?**
+  - The `include` property that was previously exported as a string path to the headers.
+  - The `gyp` property referencing the `node_api.gyp:nothing` target.
+
+- **Since When?**
+  - Marked deprecated and planned for removal in version 4.0.0.
+
+- **Why?**
+  These properties have been superseded by more reliable and clear alternatives such as `include_dir` and `targets`.
+
+- **What to Use Instead?**
+  ```js
+  const nodeAddonApi = require('node-addon-api');
+  const includeDir = nodeAddonApi.include_dir;     // Use this for include directory
+  const targets = nodeAddonApi.targets;            // Use this for gyp targets
+  ```
+
+- **Migration Tip:**
+  Update your build scripts and `binding.gyp` files to reference `include_dir` and `targets` instead of the deprecated properties.
+
+---
+
+### 2. Deprecated APIs Exposed by Node-API
+
+- **How to Disable Deprecated APIs?**
+  You can prevent the deprecated APIs from being included by defining the preprocessor directive
+  `NODE_ADDON_API_DISABLE_DEPRECATED` **at compile time** before including `napi.h`.
+
+- **Usage Example:**
+  Add the following in your `binding.gyp` or compiler flags:
+  ```gyp
+  'defines': [ 'NODE_ADDON_API_DISABLE_DEPRECATED' ],
+  ```
+
+- **Benefit:**
+  Ensures your module compiles only against the current, supported API surfaces, allowing earlier detection of deprecated usage.
+
+- **When to Use:**
+  This is critical when preparing for node-addon-api major version bumps or when maintaining best practices in native addon code.
+
+---
+
+## Planned Removals and Timeline
+
+- Deprecated features and APIs will be removed in alignment with major version bumps to allow a smooth migration period.
+- The removal schedule aligns with semver principles:
+  - **Deprecation announced at least one major release in advance.**
+  - **Removal occurs on the next major version after deprecation.**
+
+For example, the `include` and `gyp` properties deprecated in the current minor releases are planned for removal at version 4.0.0.
+
+---
+
+## How to Stay Updated
+
+- Follow the [Version Timeline](../release-history/version-timeline.md) for detailed versioning and support schedules.
+- Monitor the [Breaking Changes](../breaking-changes-migrations/breaking-changes.md) documentation for migration instructions related to removals.
+- Subscribe to release announcements and changelogs for early warnings.
+
+---
+
+## Best Practices to Avoid Deprecation Issues
+
+- **Audit Your Codebase:**
+  Regularly check for usage of deprecated properties and APIs.
+
+- **Use Compiler Flags:**
+  Enable deprecation warnings or disable deprecated APIs at build time.
+
+- **Test Against Latest Releases:**
+  Validate your addon with current node-addon-api versions to detect issues early.
+
+- **Follow Migration Guides:**
+  Refer to official docs when upgrading major versions to adjust your code accordingly.
+
+---
+
+## Troubleshooting Deprecated API Usage
+
+### Problem: Compilation fails due to deprecated API usage.
+
+- **Cause:**
+  The `NODE_ADDON_API_DISABLE_DEPRECATED` flag is active in your build, but your code calls deprecated APIs.
+
+- **Solution:**
+  - Remove or replace deprecated API usages.
+  - If immediate removal is not possible, temporarily disable the flag but create a plan to update.
+
+### Problem: Build tools or configurations still reference deprecated properties.
+
+- **Cause:**
+  Legacy references to `include` or `gyp` in the build configuration files.
+
+- **Solution:**
+  - Update your `binding.gyp` or other build files to use `include_dir` and `targets`.
+
+---
+
+## Example: Updating `binding.gyp` to Use Non-Deprecated Properties
+
+```gyp
+{
+  'targets': [
+    {
+      'target_name': 'addon',
+      'dependencies': [
+        "<(module_root_dir)/node_modules/node-addon-api/<(node-addon-api.targets)",
+      ],
+      'include_dirs': [
+        "<(module_root_dir)/node_modules/node-addon-api/<(node-addon-api.include_dir)",
+      ],
+      'sources': [ 'addon.cc' ]
+    }
+  ]
+}
+```
+
+---
+
+## Additional Resources
+
+- [Setup and Build System Integration Guide](../api-reference/integration-build/setup-build.md) — for configuring build systems with node-addon-api respecting deprecated properties
+- [Breaking Changes & Migration Guides](../changelog/breaking-changes-migrations/upgrade-guides.md) — for comprehensive upgrade instructions
+- [Error Handling and Exception Propagation](../api-reference/error-handling-lifecycle/error-exceptions.md) — to understand exception changes related to API evolution
+
+---
+
+Maintaining awareness of deprecations and proactively updating your code ensures seamless operation of your native addons with node-addon-api and the Node.js ecosystem. For detailed migration steps and troubleshooting, regularly consult the linked guides and changelogs.
