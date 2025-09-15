@@ -1,0 +1,246 @@
+---
+title: "Memory Management & Object Lifetimes"
+description: "Best practices for managing memory and ensuring proper cleanup in node-addon-api. This includes working with references, finalizers, and tracking object lifetimes to avoid leaks or invalid access."
+---
+
+# Memory Management & Object Lifetimes
+
+## Overview
+
+Managing memory correctly is essential when developing native addons with **node-addon-api**. This guide provides best practices for controlling object lifetimes, using references, implementing finalizers, and tracking memory usage. By following these practices, you will avoid common issues such as memory leaks, premature object deallocation, or invalid memory access.
+
+---
+
+## 1. Understanding Object Lifetimes and Handles
+
+When native code creates or accesses JavaScript objects, it holds _handles_ to those objects. These handles keep the underlying JavaScript objects alive. Handles are tied to _scopes_ which control their lifetime.
+
+### Default Handle Scope
+- The default handle scope is the duration of the native method call.
+- Handles created during the native method are valid throughout the method execution.
+
+### When the Default Scope Is Insufficient
+- In loops or during long computations, many handles created in the same scope can accumulate, causing high memory consumption.
+- Sometimes, you need to keep an object alive beyond the native method call.
+
+### Using Handle Scopes
+- Use `Napi::HandleScope` to create a nested scope. Handles created within are freed when the scope ends.
+- This is particularly useful in loops to release handles as soon as possible.
+
+**Example: Reducing handle lifetime inside a loop**
+```cpp
+for (int i = 0; i < LOOP_MAX; i++) {
+  Napi::HandleScope scope(info.Env());  // Create a handle scope inside the loop
+  std::string name = "inner-scope" + std::to_string(i);
+  Napi::Value newValue = Napi::String::New(info.Env(), name.c_str());
+  // Use newValue here
+}
+```
+
+### Escaping Handles
+- Sometimes you want to create a handle with a shorter lifetime and then extend one particular handle to outlive the scope.
+- Use `Napi::EscapableHandleScope` and its `Escape()` method to promote a handle to an outer scope.
+
+**Example: Escaping a handle**
+```cpp
+Napi::EscapableHandleScope scope(env);
+Napi::Value val = Napi::String::New(env, "test");
+return scope.Escape(val);
+```
+
+---
+
+## 2. Using References to Control Object Lifetimes Explicitly
+
+JavaScript objects are garbage collected, but native code may need to keep objects alive across asynchronous calls or beyond the synchronous method scope.
+
+- References hold a persistent handle to a JavaScript object and prevent garbage collection until released.
+- You create references using `Napi::Reference<T>::New(value, refCount)`.
+- `refCount` controls the strength of the reference:
+  - `0` means a _weak reference_, which does not keep the object alive.
+  - `> 0` means a _strong reference_, which keeps the object live.
+- Managing the reference count with `Ref()` and `Unref()` adjusts how the garbage collector treats the object.
+
+### Basic Reference Operations
+```cpp
+// Create a strong reference
+Napi::Reference<Napi::Object> ref = Napi::Reference<Napi::Object>::New(obj, 1);
+// Increase reference count (keep alive)
+ref.Ref();
+// Decrease reference count (allow GC if zero)
+ref.Unref();
+// Reset reference
+ref.Reset();
+```
+
+### Useful Reference functions
+- `Value()` — retrieve the referenced JavaScript object.
+- `IsEmpty()` — check if reference is valid (not cleared).
+- Move semantics are supported to manage ownership safely.
+
+### Best Practices
+- Always unref references when no longer needed to avoid memory leaks.
+- Use weak references if you want to keep a handle but allow GC.
+
+---
+
+## 3. Leveraging Finalizers for Native Resource Cleanup
+
+Finalizers are native callbacks triggered during garbage collection of native-wrapped objects, enabling cleanup of native memory and resources.
+
+### Basic Finalizers
+- Basic finalizers receive a `Napi::BasicEnv` and should avoid any interaction with JavaScript objects or the engine heap.
+- They run _during_ GC, allowing efficient native memory freeing.
+
+**Example:**
+```cpp
+Napi::ArrayBuffer::New(
+    Env(), data, length, [](Napi::BasicEnv /*env*/, void* finalizeData) {
+      delete[] static_cast<uint8_t*>(finalizeData);
+    });
+```
+
+### Extended Finalizers
+- Extended finalizers receive a `Napi::Env` and can interact with JavaScript objects.
+- These callbacks run _after_ GC, outside the engine context.
+
+### Adding Finalizers
+- You can pass a finalizer callback when creating `Napi::External`, `Napi::ArrayBuffer`, or other objects that manage external memory.
+
+**Example: External object with finalizer**
+```cpp
+return Napi::External<int>::New(Env(), new int(1), [](Napi::Env env, int* data) {
+  env.RunScript("console.log('Finalizer called')");
+  delete data;
+});
+```
+
+### Scheduling Additional Finalizers
+Use `Napi::BasicEnv::PostFinalizer()` to schedule callbacks after the basic finalizer. This is handy to execute JavaScript code related to cleanup without violating GC restrictions.
+
+---
+
+## 4. Managing External Memory with `MemoryManagement`
+
+Native addons may allocate external memory outside the JavaScript heap. The runtime needs to be informed about this to trigger garbage collection appropriately.
+
+### AdjustExternalMemory Method
+- Call `Napi::MemoryManagement::AdjustExternalMemory(env, change_in_bytes)` to notify the engine about memory usage changes.
+- Positive values indicate new memory allocated.
+- Negative values indicate memory freed.
+- The return value indicates the current estimated external memory.
+
+**Example:**
+```cpp
+int64_t currentMemory = Napi::MemoryManagement::AdjustExternalMemory(env, 1024 * 1024); // 1MB more
+// ... later ...
+Napi::MemoryManagement::AdjustExternalMemory(env, -1024 * 1024); // freed
+```
+
+### Why Adjust External Memory?
+- Letting the JavaScript engine know about native allocations improves GC timing and efficiency.
+- Avoids memory leaks caused by untracked native memory.
+
+---
+
+## 5. Troubleshooting Common Memory Management Issues
+
+<AccordionGroup title="Common Pitfalls and Resolutions">
+<Accordion title="Memory Leaks Due to Strong References">
+If you hold references with a ref count > 0 but forget to unref or reset, memory will not be freed.
+
+**Fix:** Regularly call `.Unref()` or `.Reset()` when the reference is no longer needed.
+</Accordion>
+<Accordion title="Premature Object Collection">
+Objects used after their handles or references are released may cause crashes or undefined behavior.
+
+**Fix:** Ensure that references or appropriate handle scopes keep the objects alive while used.
+</Accordion>
+<Accordion title="Invalid Finalizer Usage">
+Accessing JavaScript objects inside basic finalizers leads to runtime errors because the engine heap is inaccessible during GC.
+
+**Fix:** Use extended finalizers for JS access, or schedule JS callbacks using `PostFinalizer` after basic cleanup.
+</Accordion>
+<Accordion title="Improper HandleScope Nesting">
+Creating handle scopes improperly may invalidate handles prematurely or increase resource consumption.
+
+**Fix:** Open new handle scopes only when needed and allow them to close in reverse order before returning from native methods.
+</Accordion>
+</AccordionGroup>
+
+<Tip>
+Use `Napi::EscapableHandleScope` with `Escape()` for passing handles outside a temporary scope safely.
+</Tip>
+
+---
+
+## 6. Summary Workflow for Safe Memory and Lifetime Management
+
+<Steps>
+<Step title="Control Handle Lifetimes">
+Use `Napi::HandleScope` in loops or long-running native methods to release handles early and avoid leaks.
+</Step>
+<Step title="Use References When Needed">
+Create `Napi::Reference` to keep JS objects alive across asynchronous or extended native lifetimes.
+</Step>
+<Step title="Attach Finalizers for Native Resources">
+Pass finalizers when wrapping native pointers in `Napi::External` or other wrappers for reliable cleanup.
+</Step>
+<Step title="Adjust External Memory Size">
+Notify the JS engine of native memory allocations to ensure timely garbage collections.
+</Step>
+<Step title="Clean Up Carefully">
+Unref/reset references and detach or destroy resources to prevent leaks and dangling pointers.
+</Step>
+</Steps>
+
+---
+
+## 7. References and Further Reading
+
+- [Object Lifetime Management](object_lifetime_management.md): Details on handle scopes and lifetimes.
+- [Finalization](finalization.md): Extensive guide on finalizers with examples.
+- [Memory Management](memory_management.md): API details for external memory tracking.
+- [Reference](reference.md): Managing references to JS objects.
+- [Setup](setup.md): Environment setup and configuration.
+
+---
+
+## Example: Managing External Memory with Finalizer
+
+```cpp
+#include <napi.h>
+
+void FinalizeCallback(Napi::Env env, int* data) {
+  delete data;
+  env.PostFinalizer([](Napi::Env env) {
+    env.RunScript("console.log('Extended finalizer running');");
+  });
+}
+
+Napi::Value CreateExternalData(const Napi::CallbackInfo& info) {
+  int* nativeData = new int(42);
+  return Napi::External<int>::New(info.Env(), nativeData, FinalizeCallback);
+}
+
+Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  exports.Set("createExternalData", Napi::Function::New(env, CreateExternalData));
+  return exports;
+}
+
+NODE_API_MODULE(addon, Init)
+```
+
+```js
+// JS side
+const addon = require('./build/Release/addon.node');
+
+for(let i =0; i<10; i++) {
+  let ext = addon.createExternalData();
+}
+
+// Force garbage collection if possible and wait a moment
+setTimeout(() => console.log('Finished'), 100);
+```
+
+This example shows how to manage native memory with cleanup and JS callback scheduling after GC.
