@@ -1,0 +1,136 @@
+---
+title: "Key Features at a Glance"
+description: "Lists and briefly describes the primary features of node-addon-api—like object/value wrappers, async worker support, type safety, exception management, and compatibility badges. Provides a table or bullet summary with pointers to deeper documentation for each feature."
+---
+
+# Key Features at a Glance
+
+**Unlock the power of native Node.js addons with node-addon-api's robust and intuitive C++ wrappers.** This page highlights the primary features that make node-addon-api the preferred choice for creating efficient, maintainable, and ABI-stable native modules.
+
+---
+
+## Overview
+
+node-addon-api provides a header-only C++ abstraction over Node-API, enabling native addon developers to interact with JavaScript values and runtime environments seamlessly. Its core features simplify the complex task of building addons by enhancing type safety, error handling, asynchronous operations, and compatibility management.
+
+This summary introduces the essential capabilities of node-addon-api to help you quickly grasp its value and guide you toward deeper explorations of each aspect.
+
+---
+
+## Primary Features
+
+### 1. Native Object and Value Wrappers
+
+node-addon-api offers C++ classes that wrap JavaScript core types such as:
+
+- **Primitive values:** `Number`, `Boolean`, `String`, `Symbol`, `BigInt`, etc.
+- **Object types:** `Object`, `Array`, `Function`
+- **Buffer management:** `Buffer`, `ArrayBuffer`, and various `TypedArray` implementations
+
+By using these wrappers, you get type safety, intuitive interfaces, and integrated lifetime management, making interactions with the JavaScript environment predictable and straightforward.
+
+_Example: Creating a JavaScript string from C++_
+
+```cpp
+Napi::String greeting = Napi::String::New(env, "Hello from node-addon-api!");
+```
+
+---
+
+### 2. Exception Handling and Error Management
+
+The library seamlessly integrates C++ exceptions with JavaScript exceptions. This allows you to throw and catch errors naturally in C++, while ensuring they propagate correctly to JavaScript.
+
+- Support for different exception handling modes (_no exceptions_, _Napi::Error only_, _all exceptions_)
+- Custom error types derived from `Napi::Error`
+- Explicit mechanisms to handle terminating environments
+
+_Practical benefit:_ Prevents native module crashes due to unhandled errors and improves developer debugging experience.
+
+---
+
+### 3. Asynchronous Worker & Execution Support
+
+node-addon-api includes classes designed to simplify asynchronous execution patterns, enabling smooth integration of time-consuming native operations without blocking the JavaScript event loop.
+
+- `AsyncWorker`: A base class to run tasks in background threads
+- Variants supporting progress reporting and context passing
+- Integration with promises and thread-safe callbacks
+
+_Use case example:_ Running a CPU-intensive computation in a background thread while providing progress updates to JavaScript.
+
+---
+
+### 4. Memory Management and Object Lifetime
+
+Automatic management of JavaScript object lifetimes is critical to native addon stability. node-addon-api offers:
+
+- `ObjectWrap`: Base class to wrap native C++ classes with JS objects
+- Handle scope management to control garbage collection boundaries
+- Finalizer callbacks for executing clean-up logic when objects are collected
+
+_Outcome:_ Safe, leak-free addons with well-defined resource lifetimes.
+
+---
+
+### 5. Type Safety Enhancements
+
+The wrappers enforce strict type checks and conversions, reducing runtime errors caused by unexpected JavaScript types.
+
+- Explicit conversions between C++ native types and JavaScript counterparts
+- Support for [`Maybe`](maybe/check.md) types to avoid unchecked exceptions
+
+This helps developers write robust, predictable code that validates inputs and handles type mismatches gracefully.
+
+---
+
+### 6. ABI Stability and Compatibility Badges
+
+node-addon-api maintains binary compatibility (ABI stability) across Node.js versions supporting Node-API, allowing compiled addons to work seamlessly on different Node.js LTS versions without recompilation.
+
+The project provides badges (shields) indicating the minimum Node-API version support, enabling you to:
+
+- Quickly identify Node.js compatibility
+- Communicate addon requirements clearly to users
+
+_Benefit:_ Simplifies maintenance and deployment of native addons in diverse production environments.
+
+---
+
+### Summary Table
+
+| Feature                     | What It Does                                         | Key Benefit                          | Linked Documentation                |
+|-----------------------------|-----------------------------------------------------|------------------------------------|-----------------------------------|
+| Object and Value Wrappers    | Wrapping JS primitives and objects in C++ classes   | Type safety and intuitive APIs     | [Value Types](value-types.md)      |
+| Exception Handling           | Integrates C++ exceptions with JS exception model   | Reliable error propagation         | [Error Handling](error_handling.md) |
+| AsyncWorker & Async Support  | Background threads and async pattern abstractions   | Non-blocking native operations     | [Async Workers](async_workers.md) |
+| Memory & Lifetime Management | Native object wrapping and finalization hooks       | Prevents memory leaks and crashes  | [Object Lifetime](object_lifetime_management.md) |
+| Type Safety Enhancements     | Strict type conversions and safe APIs                | Reduces runtime errors             | [Type Checking](value-type-cast.md) |
+| ABI Stability Badges         | Indicates supported Node-API versions                | Ensures broad Node.js compatibility| [ABI Stability Guide](abi-stability-guideline.md) |
+
+---
+
+## Real-World Context
+
+Imagine you are building a high-performance image processing addon. Using node-addon-api lets you:
+
+- Safely map raw pixel data buffers to JS
+- Expose asynchronous processing without blocking the event loop
+- Catch exceptions during native computations and relay them as JS errors
+- Ensure your compiled module runs across Node.js 18 and newer versions
+
+This concise feature set enables you to focus on algorithm development rather than infrastructure.
+
+---
+
+## Where to Go Next
+
+For a comprehensive understanding of each feature, consult the linked documentation sections. Additionally, consider visiting:
+
+- [System Architecture Overview](overview/architecture-and-concepts/system-architecture.md) to understand how node-addon-api fits within Node.js
+- [Integration with Node.js and Build Tools](overview/architecture-and-concepts/integration-points.md) to learn about build-time integration
+- [Getting Started Guides](getting-started/setup-basics/install-instructions.md) for practical setup and first addon creation
+
+<Tip>
+Start with the core wrappers and error handling to build a solid foundation before advancing to asynchronous programming and advanced memory management.
+</Tip>
