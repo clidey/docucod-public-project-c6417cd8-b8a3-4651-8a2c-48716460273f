@@ -1,0 +1,277 @@
+---
+title: "Configuring Your Build Environment"
+description: "Describes how to integrate node-addon-api into your build system (e.g., node-gyp, cmake-js), set exceptions and Node-API version compatibility, and manage relevant GYP files. Provides practical examples for typical configuration scenarios."
+---
+
+# Configuring Your Build Environment
+
+This guide walks you through how to integrate **node-addon-api** into your native addon build system, including configuring `binding.gyp` or equivalent build files. It covers setting up exception handling, managing Node-API version compatibility, and properly including required GYP files. Practical examples illustrate common configuration scenarios to streamline your development.
+
+---
+
+## 1. Overview of Build Configuration
+
+When building native Node.js addons using `node-addon-api`, your build system (commonly **node-gyp** or **cmake-js**) must be configured to include the necessary header files, specify exception handling behavior, and target the correct Node-API versions.
+
+This page explains how to:
+
+- Integrate `node-addon-api` headers and GYP files into your build system.
+- Configure exception support and C++ compiler flags.
+- Declare dependencies between your targets and the `node-addon-api` targets.
+- Manage Node-API version compatibility through variables and defines.
+
+
+## 2. Prerequisites
+
+Before configuring your build environment, ensure you have:
+
+- A valid `binding.gyp` file for your addon project.
+- Installed build tools: `node-gyp`, Python, and C++ compiler for your platform.
+- Installed `node-addon-api` as a dependency via npm.
+- Set relevant Node-API version environment variables if overriding defaults.
+
+
+## 3. Including node-addon-api in Your Build System
+
+### 3.1 Adding node-addon-api as a Dependency in GYP
+
+Your `binding.gyp` should declare a dependency on the appropriate `node_addon_api` target as defined in `node_addon_api.gyp`. This target provides the necessary source files (`napi.h` and `napi-inl.h`) and settings like include directories and exception defines.
+
+Example snippet from a typical `binding.gyp`:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "your_addon",
+      "sources": ["addon.cc"],
+      "dependencies": ["../node_addon_api.gyp:node_addon_api_except"],
+      "defines": ["NAPI_CPP_EXCEPTIONS"]
+    }
+  ]
+}
+```
+
+Notes:
+- Replace `node_addon_api_except` with the variant appropriate for your exception policy (`node_addon_api`, `node_addon_api_except_all`, or `node_addon_api_maybe`).
+- The `defines` property should match how exceptions are handled in your addon.
+
+
+### 3.2 Include Directories
+
+The `node_addon_api` targets automatically set the necessary include directories for the headers.
+
+If you include `node-addon-api` manually, ensure you add:
+
+```gyp
+"include_dirs": [ "<!@(node -p \"require('node-addon-api').include_dir\")" ]
+```
+
+### 3.3 Using build variables for Node-API version
+
+You can control the Node-API version your addon targets by setting the `NAPI_VERSION` variable (or `process.versions.napi` by default).
+
+In your `common.gypi` or `binding.gyp`:
+
+```gyp
+"variables": {
+  "NAPI_VERSION%": "<!@(node -p \"process.env.NAPI_VERSION || process.versions.napi\")"
+}
+```
+
+This value controls the APIs available and compatibility.
+
+
+## 4. Exception and Compiler Settings
+
+`node-addon-api` supports multiple exception handling modes. Configure these according to your project's needs.
+
+| Exception Mode          | Target Dependency         | GYP Include File | Compiler Flags and Defines                    |
+|-------------------------|---------------------------|------------------|---------------------------------------------|
+| No Exceptions           | `node_addon_api`          | `noexcept.gypi`  | `NODE_ADDON_API_DISABLE_CPP_EXCEPTIONS`, `-fno-exceptions` flag |
+| Enable C++ Exceptions   | `node_addon_api_except`   | `except.gypi`    | `NAPI_CPP_EXCEPTIONS`, compiler exceptions enabled             |
+| Enable All C++ Exceptions | `node_addon_api_except_all` | `except.gypi` + define `NODE_ADDON_API_CPP_EXCEPTIONS_ALL` | Same as above                                  |
+| Enable "Maybe" Support | `node_addon_api_maybe`    | `noexcept.gypi` + define `NODE_ADDON_API_ENABLE_MAYBE` | Derived from No Exceptions                    |
+
+### 4.1 Configuring Exceptions on Major Platforms
+
+- **Windows (MSVC)**: `ExceptionHandling` is enabled or disabled in `msvs_settings` accordingly.
+- **macOS (Clang)**: Use `-fno-exceptions` flag to disable, or set `GCC_ENABLE_CPP_EXCEPTIONS` in `xcode_settings` to `YES` for enabling.
+
+
+## 5. Example: Typical binding.gyp Configurations
+
+### Example 1: Build with exceptions enabled (common case)
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "addon",
+      "sources": ["addon.cc"],
+      "dependencies": ["../node_addon_api.gyp:node_addon_api_except"],
+      "defines": ["NAPI_CPP_EXCEPTIONS"]
+    }
+  ]
+}
+```
+
+### Example 2: Build with exceptions disabled (noexcept mode)
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "addon",
+      "sources": ["addon.cc"],
+      "dependencies": ["../node_addon_api.gyp:node_addon_api"],
+      "includes": ["../noexcept.gypi"]
+    }
+  ]
+}
+```
+
+### Example 3: Enabling "Maybe" support
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "addon",
+      "sources": ["addon.cc"],
+      "dependencies": ["../node_addon_api.gyp:node_addon_api_maybe"],
+      "includes": ["../noexcept.gypi"],
+      "defines": ["NODE_ADDON_API_ENABLE_MAYBE"]
+    }
+  ]
+}
+```
+
+
+## 6. Using Custom Namespaces and Exception Modes
+
+You may want to use a custom C++ namespace for `node-addon-api` or combine exception modes.
+
+Example configuration enabling a custom namespace:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "addon_custom_ns",
+      "sources": ["addon.cc"],
+      "dependencies": ["../node_addon_api.gyp:node_addon_api"],
+      "defines": ["NAPI_CPP_EXCEPTIONS", "NAPI_CPP_CUSTOM_NAMESPACE=my_namespace"]
+    }
+  ]
+}
+```
+
+
+## 7. Managing Multiple Build Targets
+
+The provided `binding.gyp` examples in the node-addon-api repository show how to manage multiple targets with different exception modes in the same build file. This technique helps when testing or building variants of your addon using different exception handling policies.
+
+Example snippet from `test/binding.gyp`:
+
+```gyp
+{
+  "target_defaults": {
+    "variables": {
+      "build_sources": ["addon.cc", "buffer.cc", ...]
+    }
+  },
+  "targets": [
+    {
+      "target_name": "binding",
+      "dependencies": ["../node_addon_api.gyp:node_addon_api_except"],
+      "sources": [">@(build_sources)"],
+      "defines": ["NODE_ADDON_API_ENABLE_TYPE_CHECK_ON_AS"]
+    },
+    {
+      "target_name": "binding_noexcept",
+      "dependencies": ["../node_addon_api.gyp:node_addon_api"],
+      "sources": [">@(build_sources)"],
+    },
+    {
+      "target_name": "binding_custom_namespace",
+      "dependencies": ["../node_addon_api.gyp:node_addon_api"],
+      "sources": [">@(build_sources)"],
+      "defines": ["NAPI_CPP_CUSTOM_NAMESPACE=cstm"]
+    }
+  ]
+}
+```
+
+
+## 8. Advanced Configuration Options
+
+- **Using node-api Headers**: To build against standalone Node-API headers, set the environment variable `use_node_api_headers=true` and add the include directory as shown:
+
+```gyp
+"conditions": [
+  ['use_node_api_headers=="true"', {
+    'include_dirs+': ["<!@(node -p \"require('node-api-headers').include_dir\")"]
+  }]
+]
+```
+
+- **Coverage Instrumentation**: Enable coverage on Linux with these flags in `binding.gyp`:
+
+```gyp
+"conditions": [
+  ['want_coverage=="true" and OS=="linux"', {
+    'cflags_cc': ['--coverage'],
+    'ldflags': ['--coverage']
+  }]
+]
+```
+
+
+## 9. Verification and Best Practices
+
+After configuring your build environment:
+
+- Run `node-gyp configure build` and verify your addon compiles without errors.
+- Confirm that exception handling works by testing exception throwing and catching in your addon.
+- Use the Node-API version defines as required to maintain compatibility across Node.js versions.
+- Avoid mixing incompatible exception modes in a single target.
+- Use descriptive `target_name` values to differentiate between build variants.
+
+
+## 10. Troubleshooting Common Build Issues
+
+<AccordionGroup title="Common Build Configuration Issues">
+<Accordion title="Headers Not Found or Include Errors">
+Verify that you have included the correct include directories, especially with `"<!@(node -p \"require('node-addon-api').include_dir\")"` in your `include_dirs`. Check `node-addon-api` installation and npm link status.
+</Accordion>
+<Accordion title="Exception Handling Configuration Mismatches">
+Ensure that the `defines` and `dependencies` in your `binding.gyp` match for exception modes. For example, do not define `NAPI_CPP_EXCEPTIONS` if using the noexcept variant.
+</Accordion>
+<Accordion title="Node-API Version Variables Not Set Properly">
+Set `NAPI_VERSION` correctly through environment variables or `common.gypi`. Missing or incorrect versions cause build or runtime failures.
+</Accordion>
+<Accordion title="Platform-Specific Compiler Errors">
+Adjust `msvs_settings` for Windows or `xcode_settings` for macOS to enable or disable exceptions properly to match your build mode.
+</Accordion>
+</AccordionGroup>
+
+
+## 11. Additional Resources
+
+- [node-addon-api GitHub `binding.gyp` examples](https://github.com/nodejs/node-addon-api/tree/main/test)
+- [node-gyp Documentation](https://github.com/nodejs/node-gyp#readme)
+- [Node-API Versioning and Compatibility Guide](/api-reference/integration-build/api-versioning-support)
+
+---
+
+By following the configurations and practices outlined here, you can successfully integrate `node-addon-api` in your native addon’s build environment and ensure compatibility, stability, and consistent exception handling across platforms and Node.js versions.
+
+
+---
+
+<Check>Ensure you select the correct `node_addon_api` target variant to align with your exception handling preferences before building.</Check>
+
+<Info>Setting the `NAPI_VERSION` variable explicitly can help avoid ABI breaks when targeting multiple Node.js versions.</Info>
+
+<Tip>Use the sample `binding.gyp` files in the node-addon-api repository as templates to speed up your addon build configuration.</Tip>
