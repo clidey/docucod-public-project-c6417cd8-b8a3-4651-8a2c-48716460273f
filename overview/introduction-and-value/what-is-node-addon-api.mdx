@@ -1,0 +1,148 @@
+---
+title: "What is node-addon-api?"
+description: "Introduces node-addon-api as a set of C++ header-only wrapper classes for the C-based Node-API, providing a modern C++ experience for building native Node.js addons, and explains its focus on low overhead, exception safety, and wide compatibility with active Node.js LTS versions."
+---
+
+# What is node-addon-api?
+
+## Introducing node-addon-api: Modern C++ Wrappers for Node-API
+
+For native Node.js addon developers seeking a rich, modern C++ experience, **node-addon-api** offers a powerful solution. It provides a set of header-only C++ wrapper classes that build on top of the C-based Node-API, simplifying native addon development while maintaining minimal overhead and tight integration with the Node.js ecosystem.
+
+### Why node-addon-api Matters
+
+Native addons written directly against Node-API can be cumbersome, requiring verbose and low-level C code to manage JavaScript values, error handling, and lifecycle. **node-addon-api** transforms this by delivering:
+
+- **A clean C++ object model**: Intuitive classes and methods that map closely to JavaScript concepts.
+- **Exception safety and integration**: Support for synchronous C++ exceptions that interoperate gracefully with JavaScript exceptions for seamless error handling.
+- **Low overhead**: Since it is header-only and works atop the stable Node-API ABI, it adds minimal runtime cost to your addon.
+- **Wide compatibility**: Supports all active Node.js LTS versions, ensuring your native code runs across multiple Node releases.
+
+### Who Should Read This?
+- C++ developers building or maintaining native addons for Node.js.
+- Teams aiming to modernize their addons and reduce maintenance complexity.
+- Projects requiring robust exception safety and consistent Node.js compatibility.
+
+
+---
+
+## What is node-addon-api?
+
+Simply put, **node-addon-api** is a collection of header-only C++ classes that wrap the plain C Node-API interface exposed by Node.js. The Node-API itself offers a stable C ABI for building native modules, insulating addons from changes in the underlying JavaScript runtime.
+
+**node-addon-api** brings:
+
+- A **modern C++ interface** that abstracts Node-API's details.
+- **Rich type mapping** between C++ and JavaScript.
+- Automatic **memory and lifecycle management** of JavaScript objects and native resources.
+- Support for **C++ exceptions**, mapped to JavaScript exceptions, improving error workflows.
+
+It focuses on keeping the wrappers lightweight and efficient while providing a safer and easier approach to addon development.
+
+
+### How node-addon-api Works
+
+Under the hood, node-addon-api operates purely as inline C++ code (*header-only*), wrapping and forwarding calls to the C-based Node-API. This guarantees ABI stability without impacting Node.js' runtime or requiring separate binaries for different Node versions.
+
+Developers include the `napi.h` header and leverage C++ classes like `Napi::Object`, `Napi::Function`, `Napi::Buffer<T>`, and higher-level abstractions such as `Napi::ObjectWrap<T>` to create and expose native objects seamlessly.
+
+
+---
+
+## Key Characteristics and Focus Areas
+
+### Low Overhead
+The module is designed to minimize runtime overhead by performing all wrapping through inline C++ code with minimal indirection. This ensures that native addons compiled with node-addon-api perform efficiently, closely matching the performance of raw Node-API calls.
+
+### Exception Safety
+One standout feature is **exception safety**. If your build enables C++ exceptions, node-addon-api automatically translates between C++ exceptions and JavaScript exceptions:
+
+- Throw a `Napi::Error` in C++ to propagate to JavaScript.
+- Catch JavaScript exceptions as C++ exceptions when calling JavaScript functions from native code.
+
+If exceptions are disabled, it falls back on a robust optional return boxing (`Maybe<T>`) and pending exception checks, so you can handle errors reliably without exceptions.
+
+### Compatibility
+node-addon-api supports all **active Node.js LTS versions**, starting from Node.js 18.x and later. It adapts to the varying Node-API versions exposed by Node.js releases, maintaining compatibility without requiring recompilation for patch versions.
+
+The module itself follows a support matrix aligned to Node.js LTS cycles, regularly dropping support for older LTS versions that reach end-of-life.
+
+
+---
+
+## The Class Hierarchy: Rich C++ Constructs Mapping JavaScript Concepts
+
+node-addon-api exposes an extensive hierarchy of classes representing JavaScript value types and helper constructs. For example:
+
+- **Primitive types** like `Napi::Boolean`, `Napi::Number`, `Napi::String`, and `Napi::BigInt`
+- **Object types** like `Napi::Object`, `Napi::Array`, `Napi::Buffer<T>`, and typed arrays
+- **Function wrappers** like `Napi::Function`, `Napi::FunctionReference`
+- **Wrapper classes** for C++ objects, such as `Napi::ObjectWrap<T>` and `Napi::Addon<T>`
+- **Error classes** like `Napi::Error`, `Napi::TypeError`, `Napi::RangeError`
+- **Async workers and thread-safe functions** for advanced async operations
+
+This hierarchy gives you ready-to-use building blocks aligned to JavaScript semantics, making native addon code more intuitive and less error-prone.
+
+
+---
+
+## Typical Developer Workflow Using node-addon-api
+
+1. **Add node-addon-api as a dependency** in your `package.json`.
+2. **Configure your build system** (commonly `node-gyp`) to reference node-addon-api.
+3. **Include `napi.h`** in your native C++ source files.
+4. **Write addon code** using node-addon-api classes for value handling, object wrapping, and async workers.
+5. **Handle errors using exceptions or Maybe types,** depending on your build configuration.
+6. **Build your addon** targeting active Node.js LTS versions.
+7. **Use the addon in JavaScript** just like any native module, confident in ABI stability.
+
+
+---
+
+## Practical Tips and Best Practices
+
+- **Enable exceptions integration if your project uses C++ exceptions**; it significantly simplifies error handling.
+- **Consult the full class hierarchy** (available in `/doc/hierarchy.md`) to leverage the right wrapper types.
+- **Avoid including V8 internals headers** like `v8.h` and instead rely strictly on node-addon-api and Node-API headers.
+- **Use `Napi::ObjectWrap<T>` to expose C++ classes as JavaScript objects** with proper lifetime management.
+- **Refer to the setup guide** (`/doc/setup.md`) for details on build configuration and system prerequisites.
+
+
+---
+
+## Troubleshooting Common Scenarios
+
+- If you encounter missing symbols or build failures, ensure your `binding.gyp` correctly references `node-addon-api` targets.
+- For exception-related confusion, verify whether your build enables or disables C++ exceptions and match error handling accordingly.
+- To confirm compatibility, always check your Node.js version against the active LTS versions supported by your node-addon-api release.
+
+
+---
+
+## Getting Started with node-addon-api
+
+Ready to start? Your first steps include:
+
+- Adding `node-addon-api` to your project’s dependencies.
+- Adjusting your `binding.gyp` to integrate node-addon-api with or without exceptions.
+- Including `#include <napi.h>` in your native source files.
+- Writing simple native methods or wrapping C++ classes for exposure to JavaScript.
+
+You can explore detailed setup instructions and usage examples in accompanying documents like [Setup](setup.md), [Examples](https://github.com/nodejs/node-addon-examples), and [Full Class Hierarchy](hierarchy.md).
+
+
+---
+
+## Additional Resources
+
+- [Official Node-API Documentation](https://nodejs.org/api/n-api.html)
+- [Node.js ABI Stability Guide](https://nodejs.org/en/docs/guides/abi-stability/)
+- [node-addon-api GitHub Repository](https://github.com/nodejs/node-addon-api)
+- [Examples of Addon Implementations Using node-addon-api](https://github.com/nodejs/node-addon-examples)
+
+Delve into the rest of our documentation to understand usage patterns, error handling, async programming, and best practices for maximizing your productivity and addon robustness.
+
+
+---
+
+_By leveraging `node-addon-api`, native addon developers gain a safer, cleaner, and fully compatible C++ experience rooted in Node.js’ stable C API, ensuring addon longevity across Node.js versions with ease._
