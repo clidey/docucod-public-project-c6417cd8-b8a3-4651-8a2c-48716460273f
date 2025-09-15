@@ -1,0 +1,176 @@
+---
+title: "Breaking Changes"
+description: "Understand changes that impact compatibility or require attention when upgrading. Each breaking change entry highlights what changed, why, and which versions are affected."
+---
+
+# Breaking Changes
+
+Understanding breaking changes is crucial when upgrading your node-addon-api dependency to ensure seamless integration and prevent runtime issues. This page highlights important compatibility-impacting changes, explains their rationale, and clearly indicates which versions are affected. By reviewing these entries before upgrading, you can plan necessary code modifications and maintain stable native addon operation.
+
+---
+
+## What Are Breaking Changes?
+
+Breaking changes refer to modifications in node-addon-api that alter or remove existing functionality in a way that may cause your native addons to fail or behave unexpectedly unless appropriate action is taken during upgrade. These could include API alterations, semantic shifts, or behavioral updates that invalidate earlier assumptions.
+
+## Why This Matters to You
+
+As a developer building or maintaining native addons with node-addon-api, upgrades unlock improvements and security fixes. However, breaking changes require your attention to adapt your codebase accordingly. This page helps you anticipate these changes by offering clear explanations and practical guidance.
+
+---
+
+## How to Use This Page
+
+Each breaking change entry includes:
+
+- **What changed:** Description of the modification or removal.
+- **Why it changed:** The reasoning or motivation behind the change.
+- **Affected versions:** Which releases introduced or fix the change.
+
+We recommend reading these carefully before upgrading. Use the migration tips and example patterns to update your code smoothly.
+
+---
+
+## Common Types of Breaking Changes
+
+- **API Signature Changes:** Methods or constructors with modified parameters or return types.
+- **Behavioral Changes:** Adjustments in how objects manage lifecycle or error propagation.
+- **Removal of Deprecated Features:** Eliminations of previously deprecated APIs or support.
+- **Build Configuration Updates:** Changes affecting how to declare dependencies or flags.
+
+---
+
+## Notable Breaking Changes
+
+### Migration from NAN to Napi::ObjectWrap
+
+- **What changed:** Moving from Nan::ObjectWrap to `Napi::ObjectWrap` requires rewriting class constructors to accept `Napi::CallbackInfo` and associating native methods differently.
+
+- **Why it changed:** To leverage Node-API’s stable ABI, improve memory management and exception handling compatibility, and streamline native addon lifecycle.
+
+- **Affected versions:** Starting with version 3.x and later; essential migration for modules previously using NAN wrapping.
+
+<Steps>
+<Step title="Adjust Class Constructor">
+Rewrite your class constructor to take `const Napi::CallbackInfo& info` and invoke the ObjectWrap base constructor:
+
+```cpp
+[ClassName](const Napi::CallbackInfo& info);
+
+[ClassName]::[ClassName](const Napi::CallbackInfo& info) : Napi::ObjectWrap<[ClassName]>(info) {
+  // Your original constructor code
+}
+```
+</Step>
+<Step title="Move Initialization">
+Shift initialization logic from the original constructor into the new one and delete the old constructor.
+</Step>
+<Step title="Associate Methods">
+Initialize native methods using `DefineClass` with `InstanceMethod`, `InstanceAccessor`, and `StaticMethod` within your `Init` function.
+</Step>
+<Step title="Access Wrapped Object">
+Use the `this` pointer directly to access the wrapped object instance instead of the NAN unwrap method.
+</Step>
+</Steps>
+
+### Changes in Method Return Values
+
+- **What changed:** Methods that previously returned values to JavaScript but no longer do so must now explicitly return `void`.
+
+- **Why it changed:** To clarify API behavior and improve consistency with Node-API patterns.
+
+- **Affected versions:** Applies beginning with the 3.x series onward.
+
+### Accessing Attributes and Methods
+
+- **What changed:** Access to object attributes and member functions uses `.` instead of `->` for `Napi::Object` instances.
+
+- **Why it changed:** Aligns with `Napi::Object` design and reduces pointer dereferencing confusion.
+
+- **Affected versions:** Version 3.x and later.
+
+---
+
+## Build Configuration Breaking Changes
+
+### Declaration of Dependencies in `binding.gyp`
+
+- **What changed:** New syntax to declare dependencies on node-addon-api targets for different exception handling capabilities:
+
+  - No exceptions: `node_addon_api`
+  - Exceptions for `Napi::Error`: `node_addon_api_except`
+  - All C++ exceptions: `node_addon_api_except_all`
+
+- **Why it changed:** To provide granular control of C++ exception handling behavior within native addons.
+
+- **Affected versions:** Starting with node-addon-api 3.x.
+
+Example binding.gyp snippet:
+
+```gyp
+{
+  'dependencies': [
+    "<!@(node -p \"require('node-addon-api').targets\") : node_addon_api_except"
+  ],
+}
+```
+
+### Optional Flags
+
+- **`NODE_ADDON_API_DISABLE_DEPRECATED`**: defines whether deprecated APIs are excluded at compile time.
+- **`NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS`**: controls whether the Node process terminates on uncatchable exceptions.
+
+These should be considered in your build setup according to your project's tolerance for deprecated code and exception handling behavior.
+
+---
+
+## Migration Tips
+
+- Run the provided migration script located at `tools/conversion.js` to automate common syntax changes.
+
+- After running the migration script, thoroughly review and test your addon to fix issues that require manual reconstruction.
+
+- Carefully review method signatures, constructor definitions, and access syntax changes.
+
+- Consult the Setup and Build Integration pages for updates on `binding.gyp` configuration.
+
+---
+
+## Troubleshooting Common Issues
+
+- **Addon Fails to Compile:** Verify that the required target dependencies in `binding.gyp` match your exception handling choice.
+- **Runtime Crashes or Fatal Exceptions:** Check whether `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` is defined; consider enabling for non-terminating behavior.
+- **Unexpected Behavior in ObjectWrap Classes:** Confirm constructors follow the new `Napi::CallbackInfo` pattern and method bindings use `DefineClass`.
+
+For unresolved problems, please consult the community forums, GitHub issues, or the Troubleshooting Setup Issues page.
+
+---
+
+## Summary
+
+Keeping up-to-date with breaking changes in node-addon-api ensures your native addons remain reliable and performant. This page serves as a central, user-focused reference outlining what to expect during upgrades, why changes were made, and how to migrate with practical instructions. Review it during your upgrade planning to avoid surprises.
+
+---
+
+## Related Documentation
+
+- [Setup and Build System Integration](/api-reference/integration-build/setup-build) — for in-depth build configuration guidance.
+- [Migration Script and Tools (in Tools README)](tools/README.md) — to assist with upgrade automation.
+- [Error Handling and Exception Propagation](/guides/advanced-best-practices/error-handling) — to understand exception support changes.
+- [Version Management & Node.js Compatibility](/guides/advanced-best-practices/version-compatibility) — for version targeting and compatibility strategies.
+- [Troubleshooting Setup Issues](/getting-started/troubleshooting/troubleshooting-guide) — for resolving common upgrade-related problems.
+
+---
+
+For questions or to report issues related to breaking changes, please visit the [node-addon-api GitHub Issues](https://github.com/nodejs/node-addon-api/issues).
+
+
+---
+
+<Tip>
+Regularly reviewing breaking changes before upgrading your projects saves time and prevents stability issues. Always test your native addons thoroughly after applying updates.
+</Tip>
+
+<Check>
+Before upgrading, back up your current working addon code and set up a testing environment that matches production as closely as possible.
+</Check>
