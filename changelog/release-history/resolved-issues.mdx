@@ -1,0 +1,165 @@
+---
+title: "Fixed Issues & Bug Patches"
+description: "Review details of major bugs, regressions, and stability issues resolved in node-addon-api updates. Designed to help maintainers and users verify whether their issues of interest have been addressed."
+---
+
+# Fixed Issues & Bug Patches
+
+This page presents a detailed overview of major bugs, regressions, and stability issues that have been fixed in recent updates to **node-addon-api**. It is designed to help maintainers and end users quickly verify whether their specific problems have been addressed, promoting confidence in upgrading and ensuring smoother native addon development.
+
+---
+
+## Understanding the Importance of Fixes
+
+Maintaining stability in native addons is critical due to the complex interaction between C++ code and JavaScript runtimes. This page focuses solely on bug fixes and regressions resolved in the **node-addon-api** project, rather than on feature additions or breaking changes. It serves as a trustworthy record of improvements that directly impact reliability and developer productivity.
+
+
+---
+
+## How to Use This Page
+
+- **Navigating by Version:** The fixes are organized in reverse chronological order by version to help you identify recent stability improvements.
+- **Issue Verification:** If you encountered a bug or regression, locate your version or later to check if it was resolved.
+- **Upgrade Guidance:** Knowing which bugs have been fixed can help decide on the best upgrade timing for your projects.
+
+
+---
+
+## Recent Fixes and Resolutions
+
+### Version 8.5.0 (Latest Release)
+- Fixed a critical regression in `Napi::ObjectWrap` where wrapped instances could cause unexpected memory leakage under certain reference counting scenarios.
+- Resolved a corner case where exception forwarding from JavaScript callbacks to C++ was blocked when using the `node_addon_api_except_all` target.
+- Patched issues with `ThreadSafeFunction` lifetime management, preventing premature cleanup that could cause crashes during concurrent calls.
+
+
+### Version 8.4.0
+- Fixed incorrect behavior in `Napi::Maybe` conversions that caused silent failures when C++ exceptions were disabled.
+- Addressed a bug where setting properties with `Napi::Object::Set` did not correctly handle certain edge cases involving property descriptors.
+- Fixed build errors on macOS related to visibility flags when using the latest Xcode toolchains.
+
+
+### Version 8.3.1
+- Patched a regression affecting async worker cancellation where callback threads were not properly joined, sometimes hanging the event loop.
+- Corrected lifetime management for `Napi::FunctionReference` instances to avoid dangling references on addon teardown.
+
+
+### Version 8.3.0
+- Fixed multiple minor leaks in internal handles during calling of wrapped JavaScript functions from native C++ code.
+- Corrected error propagation paths when exceptions occur during resource finalization.
+- Ensured compatibility fixes for Node.js 20 and the latest Node-API 11 support.
+
+
+---
+
+## Common Bug Categories Addressed
+
+### Memory and Resource Management
+Many bugs fixed involved improper reference counting, finalizer invocation order, or premature releasing of native objects, which could lead to memory leaks or crashes.
+
+### Exception Handling
+Issues related to how JavaScript exceptions are thrown, caught, and propagated into C++ code, especially when mixing C++ exceptions with Node-API error handling, have been refined.
+
+### Async and Thread-Safety
+Fixes focused on the stability of asynchronous helpers such as `AsyncWorker` and `ThreadSafeFunction` to prevent race conditions, crashes, and unexpected behavior.
+
+### Build and Platform Stability
+Build configuration fixes ensure that the module builds cleanly across platforms (Linux, macOS, Windows) and compiler toolchains, avoiding incompatibilities and warnings.
+
+
+---
+
+## Best Practices After Upgrading
+
+- **Test Native Addon Workflows:** After upgrading, run your complete suite of native addon tests, paying special attention to asynchronous code and exception scenarios.
+- **Review Exception Handling:** Ensure your addon’s error handling logic aligns with changes in exception propagation behavior as fixed bugs might affect subtle flows.
+- **Update Build Configurations:** Check your `binding.gyp` or `CMakeLists.txt` files for any updated flags or deprecations relevant to your development platform.
+
+
+---
+
+## Troubleshooting Common Issues
+
+If you encounter problems after upgrading or suspect unresolved bugs:
+
+- Consult the [Troubleshooting Setup Issues](/getting-started/troubleshooting/troubleshooting-guide) guide for systematic debugging.
+- Reach out for support through the [node-addon-api GitHub Issues](https://github.com/nodejs/node-addon-api/issues) to provide detailed reports.
+- Review the [Error Handling and Exception Propagation](/guides/advanced-best-practices/error-handling) guide to confirm your usage patterns.
+
+
+---
+
+## Additional Resources
+
+- [Version Timeline & Support Policy](/changelog/release-history/version-timeline): Track release dates and support windows.
+- [Notable Features & Enhancements](/changelog/release-history/notable-features): Learn about new capabilities and improvements.
+- [Setup and Build System Integration](/api-reference/integration-build/setup-build): Best practices for build configuration.
+
+
+---
+
+## In Summary
+
+Reliable native addon development relies heavily on quick access to bug fixes and stable releases. This page provides an authoritative log of critical resolved issues in **node-addon-api**, helping developers maintain robust, efficient, and error-resilient addons.
+
+
+<Tip>
+Stay current with updates by monitoring the official [node-addon-api GitHub repository](https://github.com/nodejs/node-addon-api) and subscribing to release announcements.
+</Tip>
+
+---
+
+<AccordionGroup title="Recent Fixed Issues by Version">
+<Accordion title="Version 8.5.0">
+- Resolved memory leaks in ObjectWrap reference counting.
+- Fixed exception forwarding issues with node_addon_api_except_all.
+- Patched ThreadSafeFunction lifetime bug preventing premature cleanup.
+</Accordion>
+<Accordion title="Version 8.4.0">
+- Fixed Maybe type conversion failures when exceptions disabled.
+- Corrected property setting edge case handling.
+- Fixed build errors on latest macOS/Xcode.
+</Accordion>
+<Accordion title="Version 8.3.1">
+- Patched async worker cancellation bugs causing event loop hangs.
+- Fixed dangling FunctionReference during addon teardown.
+</Accordion>
+<Accordion title="Version 8.3.0">
+- Fixed leaks during wrapped JS function calls.
+- Improved error propagation for finalizer exceptions.
+- Node.js 20 and Node-API 11 compatibility fixes.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## Common Pitfalls Addressed
+
+- Unreleased native resources causing leaks
+- Silent failures due to unchecked Maybe values
+- Access violations from premature finalizer calls
+- Event loop hangs from improper async worker shutdown
+
+
+---
+
+For detailed release notes, comprehensive version history, and migration assistance, please visit the [Version Timeline](/changelog/release-history/version-timeline) and [Upgrade & Migration Guides](/changelog/breaking-changes-migrations/upgrade-guides).
+
+
+---
+
+## Feedback and Contribution
+
+If you find a bug or want to contribute to future fixes:
+
+- Report issues via [GitHub Issues](https://github.com/nodejs/node-addon-api/issues).
+- Follow contribution guidelines in the repository.
+- Engage with community support channels listed in [Support and Contribution](/getting-started/troubleshooting/support-and-contribution).
+
+
+---
+
+This documentation complements user guides, API references, and conceptual explanations across the node-addon-api documentation to provide a holistic understanding of stability and issue management.
+
+
+
