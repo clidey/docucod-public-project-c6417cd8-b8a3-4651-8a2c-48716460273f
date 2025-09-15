@@ -1,0 +1,146 @@
+---
+title: "Running and Using Your Addon"
+description: "Explains how to compile, load, and execute your addon from JavaScript, ensuring users understand the process from build to consumption. Demonstrates both manual and scripting-based invocation, aligned with real workflow."
+---
+
+# Running and Using Your Addon
+
+This guide explains how to take your compiled native addon built with **node-addon-api**, load it from JavaScript, and run your first operation. It demonstrates both manual and automated invocation techniques, helping you validate your build and start leveraging your addon in real-world applications.
+
+---
+
+## 1. Ensure Your Addon Is Built
+
+Before running your addon, make sure you have successfully compiled it. Typically this involves using the [`node-gyp`](../setup.md#installation-and-usage) build tool or an alternative like `cmake-js` as documented.
+
+### Verify Build Artifacts
+
+- Look for a compiled binary file within your build directory, such as `build/Release/<target>.node`.
+- Confirm no build errors appeared during compilation.
+
+<Tip>
+If your build failed or you don't have the compiled addon binary, revisit the [Setup](../setup.md) and [node-gyp](../node-gyp.md) guides to correctly configure your build environment and compilation steps.
+</Tip>
+
+---
+
+## 2. Loading Your Addon in JavaScript
+
+Once compiled, your native addon can be required directly into JavaScript code using Node.js' `require` mechanism.
+
+### Manual Loading
+
+Place the following in a `.js` file (e.g., `index.js`) within your project directory:
+
+```js
+// Adjust the path to point to your compiled addon
+const addon = require('./build/Release/addon.node');
+
+console.log('Addon loaded:', addon);
+```
+
+### Using the Addon
+
+- The exported object `addon` corresponds to what your C++ `Init` function returns.
+- It provides the functions, classes, or properties you defined in your native module.
+
+<Tip>
+Your addon name in the `require` path must match the `target_name` in your `binding.gyp` and the argument to the `NODE_API_MODULE` macro in C++.
+</Tip>
+
+---
+
+## 3. Running Your First Operation
+
+To validate your addon is working correctly, invoke one of its methods or properties exposed through the exports object.
+
+### Example from the `test/addon.cc` sample:
+
+```js
+const addon = require('./build/Release/addon.node');
+
+// Call the CreateAddon function exposed by the native addon
+const instance = addon.CreateAddon();
+
+// Use methods defined on the addon object
+console.log('Value increment:', instance.increment());
+console.log('Value decrement (subObject):', instance.subObject.decrement());
+```
+
+### What to Expect
+
+- The `increment` method should return an incremented number starting from 42.
+- The `subObject.decrement` method decreases the value and returns the decremented number.
+
+<Tip>
+Testing with the example functions ensures that your native addon has been correctly loaded, and your C++ to JavaScript bindings are functioning.
+</Tip>
+
+---
+
+## 4. Automating Addon Invocation with Scripts
+
+For consistent testing or integration, you can automate addon execution:
+
+### Example npm script in `package.json`:
+
+```json
+{
+  "scripts": {
+    "test-addon": "node index.js"
+  }
+}
+```
+
+Run with:
+
+```
+npm run test-addon
+```
+
+### Benefits
+
+- Integrates into your project workflow
+- Enables quick validation after each build
+
+---
+
+## 5. Troubleshooting Common Issues
+
+<AccordionGroup title="Troubleshooting Addon Loading and Running">
+<Accordion title="Error: Cannot find module or path issues">
+- Ensure the relative path in `require()` points to the correct `.node` file.
+- Rebuild the addon if the binary is missing or corrupted.
+</Accordion>
+<Accordion title="Symbol not found or exported property missing">
+- Confirm your C++ export names match in the `NODE_API_MODULE` macro.
+- Ensure the addon was built with C++ exception support if your code depends on it.
+</Accordion>
+<Accordion title="Runtime errors calling addon functions">
+- Verify your native function signatures and exposed methods.
+- Confirm that your addon initialization returns the proper exports object.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 6. Next Steps
+
+### Explore More Addon Usage
+
+- Review the [Creating Your First Addon](../first-addon-and-validation/your-first-addon.md) guide to learn about addon structure.
+- Study the [Error Handling & Exception Propagation](../../guides/advanced-best-practices/error-handling.md) to manage runtime errors gracefully.
+
+### Expand Your Addon
+
+- Implement additional methods and classes.
+- Connect native functionality to JavaScript business logic.
+
+### Get Help
+
+- Consult the [Troubleshooting Setup Issues](../../getting-started/troubleshooting/troubleshooting-guide.md) for complex build or runtime errors.
+- Engage with the community via GitHub or forums for support.
+
+---
+
+By following these steps, you will have successfully loaded and executed your first operation in a node-addon-api native addon, paving the way for rich native extensions within your Node.js applications.
