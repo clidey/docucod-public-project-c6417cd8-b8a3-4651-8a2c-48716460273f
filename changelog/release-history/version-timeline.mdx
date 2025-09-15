@@ -1,0 +1,119 @@
+---
+title: "Version Timeline"
+description: "Survey every node-addon-api release at a glance, including version numbers, release dates, and support window for each. This timeline is the starting point for understanding the project's evolution and long-term support commitments."
+---
+
+# Version Timeline
+
+Explore each release of the `node-addon-api` project at a glance through this comprehensive version timeline. This page offers a clear survey of all published versions, their release dates, and the support duration associated with each. Understanding this timeline is essential to grasp the evolution of `node-addon-api` and to plan your adoption strategy based on long-term support commitments.
+
+---
+
+## Understanding the Version Timeline
+
+The Version Timeline acts as your navigational tool to review every `node-addon-api` release, helping you quickly assess which versions align best with your project's needs.
+
+Key information provided includes:
+
+- **Version Numbers:** Semantic versioning used to clearly communicate the scale of changes—major, minor, or patches.
+- **Release Dates:** Precise dates marking when each version was published, essential for tracking new features or fixes over time.
+- **Support Window:** Highlights how long each version will be officially supported, enabling planning for upgrades and maintenance.
+
+This timeline empowers you to:
+
+- Pinpoint the latest stable releases.
+- Identify which versions are actively supported or nearing end-of-life.
+- Strategize version compatibility with your Node.js runtime environment based on support policies.
+
+## Version Numbering and Support Policy
+
+- **Semantic Versioning:** The versioning follows the `MAJOR.MINOR.PATCH` format.
+  - **Major releases** introduce breaking changes or drop support for older Node.js versions.
+  - **Minor releases** add backward-compatible features.
+  - **Patch releases** address bug fixes and minor improvements.
+
+- **Support Commitment:**
+  - Releases generally align with the [current Node.js release schedule](https://nodejs.dev/en/about/releases/).
+  - Older Node.js versions dropped from maintenance will no longer be supported by new major `node-addon-api` releases.
+  - Major releases that drop support will update the minimum required Node.js version accordingly.
+
+## Practical Use of the Timeline
+
+When choosing a version of `node-addon-api`, consider the following typical scenarios:
+
+- **Starting a New Project:**
+  - Prefer the latest major release to leverage new features and full support.
+
+- **Maintaining Legacy Code:**
+  - Select a version that matches your current Node.js environment's lifecycle to avoid compatibility issues.
+
+- **Preparing for Upgrades:**
+  - Use the timeline to identify upcoming deprecations and plan migration paths proactively.
+
+## Release Insights and Process
+
+- Releases are typically triggered via GitHub workflows such as the `release-please` action.
+- Version bumps occur automatically after thorough testing and validation.
+- Detailed changelogs accompany each release to clarify new features, fixes, and breaking changes.
+- In rare cases, manual release steps may be performed, adhering to strict contribution and release policies.
+
+## Troubleshooting Version Compatibility
+
+Version compatibility is crucial to avoid unexpected API mismatches or runtime errors.
+
+- Use the `VersionManagement` API at runtime to query the Node-API version and Node.js version:
+
+```cpp
+uint32_t napiVersion = Napi::VersionManagement::GetNapiVersion(env);
+const napi_node_version* nodeVersion = Napi::VersionManagement::GetNodeVersion(env);
+```
+
+- Combine this with your chosen `node-addon-api` version to ensure supported bindings.
+
+- Consult the [Versioning and Compatibility guide](/concepts/integration-and-workflows/versioning-compatibility) for detailed strategies.
+
+---
+
+## Summary Table (Example)
+
+| Version | Release Date | Support Status       | Notes                                |
+|---------|--------------|---------------------|-------------------------------------|
+| 4.0.0   | 2024-03-15   | Active              | Dropped support for Node.js 12      |
+| 3.2.1   | 2023-10-10   | Maintenance         | Patch release fixing memory leaks   |
+| 3.0.0   | 2023-06-05   | Legacy Support      | Introduced async worker improvements|
+
+*(For complete and up-to-date release details, refer to the official GitHub releases page.)*
+
+---
+
+## Best Practices
+
+- Always align your `node-addon-api` version with the Node.js versions you target.
+- Regularly check this timeline before upgrading to anticipate any breaking changes.
+- Use automated CI workflows to test your addon against multiple supported versions.
+
+<Tip>
+Staying informed with the version timeline enables better long-term maintenance, avoids unexpected incompatibilities, and helps you exploit the latest benefits of `node-addon-api` efficiently.
+</Tip>
+
+---
+
+## Related Documentation
+
+- [VersionManagement API Reference](/doc/version_management.md) — Query runtime Node.js and Node-API versions programmatically.
+- [Creating a Release](../doc/contributing/creating_a_release.md) — Understand how releases are created and managed.
+- [Versioning and Compatibility Guide](/concepts/integration-and-workflows/versioning-compatibility.mdx) — Handle version compatibility best practices.
+- [Setup and Build System Integration](/api-reference/integration-build/setup-build.mdx) — Configure your builds to target appropriate versions.
+- [Troubleshooting Setup Issues](/getting-started/troubleshooting/troubleshooting-guide.mdx) — Resolve common version-related build problems.
+
+For an overview of the project's evolution and its roadmap, this timeline serves as your trusted reference point.
+
+---
+
+## Contribution and Support
+
+If you encounter any discrepancies or need further clarity on version support, the [node-addon-api GitHub Issues](https://github.com/nodejs/node-addon-api/issues) and community channels are available for assistance.
+
+---
+
+*This page will be maintained continuously alongside each release to ensure accuracy and timely updates.*
