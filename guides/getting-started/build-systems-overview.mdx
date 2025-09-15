@@ -1,0 +1,258 @@
+---
+title: "Choosing a Build System: node-gyp vs cmake-js"
+description: "An overview guiding you through building node-addon-api projects with node-gyp and cmake-js, highlighting their differences and practical setup steps to match your workflow preferences."
+---
+
+# Choosing a Build System: node-gyp vs cmake-js
+
+## Workflow Overview
+
+This guide helps you decide between two popular build systems—**node-gyp** and **cmake-js**—for compiling native addons using **node-addon-api**. You will learn the differences, setup steps, and practical recommendations that align with your development workflow.
+
+### Prerequisites
+
+- Have **Node.js** installed
+- Basic familiarity with native addon development
+- C++ build toolchain installed for your platform (e.g., Visual Studio on Windows, Xcode on macOS, GNU toolchain on Linux)
+- Understand the [`binding.gyp`](#step-by-step-instructions-node-gyp) configuration and CMake basics if choosing `cmake-js`
+
+### Expected Outcome
+
+By following this guide, you will:
+
+- Understand the pros and cons of **node-gyp** and **cmake-js**
+- Know how to set up your **node-addon-api** project with either build tool
+- Be able to create and build your addon according to your preferred environment
+
+### Time Estimate
+
+15-30 minutes depending on familiarity with build systems
+
+### Difficulty Level
+
+Intermediate (requires setup of native build tools and some build configuration)
+
+---
+
+## Step-by-Step Instructions
+
+### Understanding the Build Systems
+
+| Build System | Description | Key Use Case |
+|--------------|-------------|--------------|
+| **node-gyp** | The established, default build tool for Node.js native addons. Uses `binding.gyp` files with JSON-like syntax, based on Google's GYP. Integrates seamlessly with Node.js ecosystem and most popular editors.
+| **cmake-js** | Uses CMake under the hood, a widely used and powerful cross-platform build system. Ideal if your project already uses CMake for other components or if you need more flexible build configurations.
+
+---
+
+### 1. Setting Up With node-gyp
+
+#### Create or Update `binding.gyp`
+
+This JSON-style file defines build configuration for your addon.
+
+Example minimal `binding.gyp`:
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myAddon",
+      "sources": ["src/my_addon.cc"]
+    }
+  ]
+}
+```
+
+You must set `target_name` to your addon name, matching the module initialization macro.
+
+#### Configure node-addon-api as a Dependency
+
+In your `binding.gyp` add (example to enable C++ exceptions):
+
+```gyp
+"dependencies": [
+  "<!@(node -p \"require('node-addon-api').targets\"):node_addon_api_except"
+],
+```
+
+Choose between these according to exception handling preferences (none, `node_addon_api`, `node_addon_api_except`, or `node_addon_api_except_all`).
+
+#### Build Your Addon
+
+Install node-gyp globally if needed:
+
+```bash
+npm install -g node-gyp
+```
+
+Run the build:
+
+```bash
+node-gyp configure
+node-gyp build
+```
+
+Success results in a compiled `.node` binary.
+
+#### Validate Build
+
+In your JS code:
+
+```js
+const addon = require('./build/Release/myAddon.node');
+console.log(addon.yourExportedFunction());
+```
+
+---
+
+### 2. Setting Up With cmake-js
+
+#### Install cmake-js
+
+```bash
+npm install -g cmake-js
+```
+
+#### Create `CMakeLists.txt`
+
+Minimal example:
+
+```cmake
+cmake_minimum_required(VERSION 3.8)
+project(myAddon)
+
+include_directories(${CMAKE_JS_INC})
+
+add_library(myAddon ${CMAKE_JS_LIB_TYPE} src/my_addon.cc)
+
+set_target_properties(myAddon PROPERTIES PREFIX "" SUFFIX ".node")
+
+target_link_libraries(myAddon ${CMAKE_JS_LIB})
+```
+
+#### Add **node-addon-api** Headers
+
+Use this in your addon source includes:
+
+```cpp
+#include <napi.h>
+```
+
+Make sure `node-addon-api` is installed as a dependency:
+
+```bash
+npm install node-addon-api
+```
+
+#### Build Your Addon
+
+Run:
+
+```bash
+cmake-js compile
+```
+
+This compiles and outputs the `.node` binary.
+
+#### Running and Validating
+
+Same as node-gyp, require the `.node` binary in your JS code.
+
+---
+
+## Decision Points & Guidance
+
+| Criteria | node-gyp | cmake-js |
+| -------- | -------- | -------- |
+| Ecosystem support | Mainstream, default | Growing, better for complex CMake projects |
+| Build configuration ease | Simple, JSON-like | More flexible but requires understanding CMake |
+| Cross-platform CI/CD | Supported by Node.js ecosystem | Powerful for multi-language projects |
+| Exception handling | Easy to integrate node-addon-api settings | Supports same with custom CMake settings |
+| Learning curve | Lower for Node.js devs | Higher, if unfamiliar with CMake |
+
+Choose **node-gyp** if:
+
+- You want the standard, well-documented and simple solution
+- Your addon is straightforward and pure Node.js native addon
+
+Choose **cmake-js** if:
+
+- Your project already uses CMake
+- You need advanced build customizations beyond `binding.gyp`
+- You want a single build tool for multiple components
+
+---
+
+## Examples & Code Samples
+
+### node-gyp: binding.gyp snippet using node-addon-api with exceptions
+
+```gyp
+{
+  "targets": [
+    {
+      "target_name": "myAddon",
+      "sources": ["src/my_addon.cc"],
+      "dependencies": [
+        "<!@(node -p \"require('node-addon-api').targets\"):node_addon_api_except"
+      ]
+    }
+  ]
+}
+```
+
+### cmake-js: Minimal `CMakeLists.txt`
+
+```cmake
+cmake_minimum_required(VERSION 3.8)
+project(myAddon)
+
+include_directories(${CMAKE_JS_INC})
+
+add_library(myAddon SHARED src/my_addon.cc)
+set_target_properties(myAddon PROPERTIES PREFIX "" SUFFIX ".node")
+target_link_libraries(myAddon ${CMAKE_JS_LIB})
+```
+
+---
+
+## Troubleshooting & Tips
+
+<AccordionGroup title="Troubleshooting Build Issues">
+<Accordion title="node-gyp does not find Python or build tools">
+Ensure Python 2 or 3 is installed and accessible. On Windows, install Visual Studio with C++ build tools. Check environment variables PATH.
+</Accordion>
+<Accordion title="cmake-js compilation errors related to CMake version">
+Verify CMake version is at least 3.8 and compatible with your platform. Upgrade CMake if necessary.
+</Accordion>
+<Accordion title="Addon throws runtime errors after build">
+Confirm that your source code initializes the addon with `NODE_API_MODULE` macro matching the target name. Make sure node-addon-api headers are included correctly and consistent.
+</Accordion>
+</AccordionGroup>
+
+<Tip>
+To maintain ABI stability and reduce maintenance, enable exception settings in your build system consistent with your source code's exception handling strategy.
+</Tip>
+
+<Tip>
+Use node-gyp for quick, minimal setups. Use cmake-js if your project has complex native dependencies or if you prefer CMake tooling.
+</Tip>
+
+<Warning>
+Avoid mixing build tools for the same project to prevent conflicts and inconsistent build outputs.
+</Warning>
+
+---
+
+## Next Steps & Related Content
+
+- Explore [Setup Your Environment](../getting-started/setup-your-environment) for detailed platform-specific build tool installation
+- Follow [Creating Your First Addon](../getting-started/create-your-first-addon) to see build systems in action
+- Refer to [Setup and Build System Integration](../../api-reference/integration-build/setup-build) for deeper configuration options
+- Consult [Troubleshooting Setup Issues](../getting-started/troubleshooting/troubleshooting-guide) if you encounter build errors
+- Review [Prebuild Tools](../doc/prebuild_tools) to learn about distributing your native addon without requiring rebuild
+
+---
+
+By carefully choosing and configuring your build system, you set a solid foundation for developing robust native addons with **node-addon-api** that seamlessly integrate with Node.js.
