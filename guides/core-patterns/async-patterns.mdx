@@ -1,0 +1,282 @@
+---
+title: "Asynchronous Workflows & Thread-Safety"
+description: "A deep dive into non-blocking patterns using async workers, async contexts, and thread-safe functions. Learn how to safely invoke JavaScript from native threads and build responsive, scalable addons."
+---
+
+# Asynchronous Workflows & Thread-Safety
+
+Explore how to design non-blocking, responsive native addons using asynchronous patterns provided by node-addon-api. This guide dives into leveraging async workers, async contexts, and thread-safe functions to safely execute long-running tasks on worker threads and communicate with JavaScript while preserving thread safety.
+
+---
+
+## 1. Overview
+
+### What This Guide Helps You Accomplish
+You will learn how to implement asynchronous workflows in native addons that delegate long-running tasks away from the event loop thread, maintaining responsive Node.js processes. The guide covers how to safely invoke JavaScript callbacks from worker threads, manage async context lifecycles, and use thread-safe functions for cross-thread communication.
+
+### Prerequisites
+- Familiarity with C++ addon development using node-addon-api.
+- Understanding of basic Node.js asynchronous programming and event loop.
+- Your build environment configured with node-addon-api and Node.js native build tools (node-gyp or cmake-js).
+
+### Expected Outcome
+By the end, you'll be able to:
+- Implement `Napi::AsyncWorker` subclasses for asynchronous native tasks.
+- Use `AsyncContext` and `CallbackScope` to scope async callbacks.
+- Create and manage `ThreadSafeFunction` instances to safely invoke JS functions from worker threads.
+
+### Time Estimate
+30 to 60 minutes depending on your C++ and Node.js background.
+
+### Difficulty Level
+Intermediate — requires some C++ expertise and familiarity with Node.js internals.
+
+---
+
+## 2. Key Concepts
+
+### Asynchronous Workers - `Napi::AsyncWorker`
+`AsyncWorker` abstracts the execution of long-running native code on a background thread with results back on the event loop thread.
+
+- Define your custom worker by inheriting from `Napi::AsyncWorker`.
+- Override `Execute()` for background processing.
+- Override `OnOK()` or `OnError()` to handle completion on the event loop.
+
+This keeps your addon non-blocking while interacting safely with JavaScript.
+
+### Async Context - `Napi::AsyncContext` and `Napi::CallbackScope`
+When making asynchronous calls involving JavaScript callbacks outside the main thread, you must establish an async context.
+
+- **`AsyncContext`** associates callbacks to an async resource lifecycle.
+- **`CallbackScope`** creates a scope to execute JS callbacks safely.
+
+This pairing ensures proper async tracking and exception handling by the Node.js runtime.
+
+### Thread-Safe Functions - `Napi::ThreadSafeFunction`
+`ThreadSafeFunction` enables native threads to call back into JavaScript safely.
+
+- Create a threadsafe function tied to a JavaScript callback.
+- Use `Call()` or `BlockingCall()` from worker threads to queue invocations.
+- The JavaScript callback executes on the event loop.
+
+This pattern is essential for addons needing callbacks triggered asynchronously by native threads.
+
+---
+
+## 3. Step-by-Step Instructions
+
+### 3.1 Implementing Asynchronous Tasks Using `Napi::AsyncWorker`
+
+<Steps>
+<Step title="Define Your AsyncWorker Subclass">
+Create a C++ class inherited from `Napi::AsyncWorker` and implement:
+- `Execute()` where you perform the background task (no JavaScript calls here).
+- `OnOK()` which runs on the main thread to call JS callbacks.
+</Step>
+<Step title="Instantiate and Queue the Worker">
+In your addon method exposed to JS:
+- Instantiate your worker with the callback function.
+- Call `Queue()` on the instance to start async execution.
+</Step>
+<Step title="Callback Invocation on Completion">
+Your overridden `OnOK()` will automatically be called on the event loop after `Execute()` finishes.
+Invoke the JavaScript callback passed from your addon method here to return results.
+</Step>
+</Steps>
+
+#### Example:
+```cpp
+class MyAsyncWorker : public Napi::AsyncWorker {
+public:
+  MyAsyncWorker(Napi::Function& callback)
+  : Napi::AsyncWorker(callback) {}
+
+  void Execute() override {
+    // Perform heavy operations here without JS interaction
+  }
+
+  void OnOK() override {
+    // Safely call back into JavaScript
+    Callback().Call({Env().Null(), Napi::String::New(Env(), "Result")});
+  }
+};
+
+Napi::Value StartAsyncTask(const Napi::CallbackInfo& info) {
+  Napi::Function callback = info[0].As<Napi::Function>();
+  MyAsyncWorker* worker = new MyAsyncWorker(callback);
+  worker->Queue();
+  return info.Env().Undefined();
+}
+```
+
+### 3.2 Using Async Context and Callback Scope
+
+When communicating async work results using other mechanisms or nested async workflows:
+
+- Instantiate an `AsyncContext` with a descriptive name.
+- Inside the thread or async function callback, create a `CallbackScope` with the context before calling any JS function.
+
+This maintains proper async tracing and error reporting.
+
+#### Example:
+```cpp
+void SomeAsyncFunction(Napi::Env env, Napi::Function jsCallback) {
+  Napi::AsyncContext asyncContext(env, "MyAddonAsyncContext");
+  // ...later on another thread or after delay
+  {
+    Napi::CallbackScope scope(env, asyncContext);
+    jsCallback.Call({Napi::String::New(env, "Event happened")});
+  }
+}
+```
+
+### 3.3 Creating and Using ThreadSafeFunction
+
+You often need to invoke JS functions from native worker threads safely:
+
+1. Create a `ThreadSafeFunction` from your JS callback:
+   ```cpp
+   auto tsfn = Napi::ThreadSafeFunction::New(
+     env,
+     jsCallback,              // JavaScript function to call
+     "TSFN Example",        // Resource name
+     0,                      // Unlimited queue size
+     1                       // Only one thread will use this
+   );
+   ```
+
+2. From a native worker thread, call `tsfn.BlockingCall(data, callback)` or `tsfn.Call(data, callback)` to schedule invocation on the event loop.
+
+3. When finished, call `tsfn.Release()` or `tsfn.Abort()` to free resources.
+
+#### Example:
+```cpp
+// Inside native worker thread
+tsfn.BlockingCall(&data, [](Napi::Env env, Napi::Function jsCallback, int* value) {
+  jsCallback.Call({Napi::Number::New(env, *value)});
+});
+```
+
+---
+
+## 4. Practical Tips & Best Practices
+
+- **Always queue async work using `AsyncWorker::Queue()`** to avoid blocking the event loop.
+- **Do not call JavaScript from arbitrary native threads without `ThreadSafeFunction`**; this will cause crashes.
+- **Use `AsyncContext` and `CallbackScope` for fine-grained async callback control** to preserve async hooks and proper error handling.
+- **Clean up `ThreadSafeFunction` instances properly** after use to prevent resource leaks.
+- **Keep background `Execute()` methods free of any JS interaction**: strictly isolate native work to avoid runtime errors.
+- **Set a descriptive resource name for `ThreadSafeFunction`**; this helps profiling and debugging.
+
+---
+
+## 5. Common Pitfalls & Troubleshooting
+
+<AccordionGroup title="Troubleshooting Asynchronous and Thread-Safety Issues">
+<Accordion title="Event Loop Blocking">
+If your JS becomes unresponsive, verify that background work is properly executed in `AsyncWorker::Execute()` and not on the main thread.
+
+**Fix:** Always offload long tasks to `Execute()`, never perform blocking operations directly in addon methods.
+</Accordion>
+
+<Accordion title="Incorrect JavaScript Invocation from Worker Threads">
+Direct calls from native threads to JS without `ThreadSafeFunction` cause crashes or unpredictable behavior.
+
+**Fix:** Use `ThreadSafeFunction` objects for cross-thread JS calls.
+
+If you receive errors about invalid handles or environment issues during JS calls, confirm proper usage of `CallbackScope` and `AsyncContext`.
+</Accordion>
+
+<Accordion title="Memory Leaks and ThreadSafeFunction Mismanagement">
+Not releasing or aborting `ThreadSafeFunction` leads to leaks.
+
+**Fix:** Call `Release()` when your addon no longer needs to invoke the JS callback.
+</Accordion>
+</AccordionGroup>
+
+---
+
+## 6. Additional Resources & Next Steps
+
+- **Explore [`Napi::AsyncWorker` API Reference](https://github.com/nodejs/node-addon-api/blob/main/doc/async_worker.md) for advanced usage tips.**
+- **Learn about [`Napi::ThreadSafeFunction`](https://github.com/nodejs/node-addon-api/blob/main/doc/threadsafe_function.md) for safe cross-thread calls.**
+- **Review `AsyncContext` and `CallbackScope` docs for fine control over async callbacks.**
+- **Complement this guide with the `Asynchronous operations` conceptual overview.**
+- **For build system integration, consult the Setup and Build System Integration docs.**
+
+---
+
+## 7. Visualizing Asynchronous Flow
+
+```mermaid
+flowchart TD
+  A[JavaScript Call into Native Addon] --> B[Queue AsyncWorker]
+  B --> C[Native Background Thread Executes Execute()]
+  C --> D[OnOK() Runs on Event Loop]
+  D --> E[Invoke JS Callback]
+
+  subgraph ThreadSafeFunction Flow
+    F[Native Worker Thread] --> G[Call ThreadSafeFunction.Call()]
+    G --> H[Queue Callback on Event Loop]
+    H --> E
+  end
+
+  subgraph AsyncContext & CallbackScope
+    D --> I[Create CallbackScope]
+    I --> E
+  end
+```
+
+This diagram illustrates the separation of worker thread execution from safe JavaScript callback invocation via event loop scheduling.
+
+---
+
+<Tip>
+Mastering asynchronous workflows and thread-safety in node-addon-api is vital to creating performant, robust native addons that integrate seamlessly with Node.js' event-driven architecture.
+</Tip>
+
+---
+
+## Appendix: Minimal Example Combining AsyncWorker and ThreadSafeFunction
+
+```cpp
+class ExampleWorker : public Napi::AsyncWorker {
+  Napi::ThreadSafeFunction tsfn;
+public:
+  ExampleWorker(Napi::Function& callback, Napi::Env env)
+  : Napi::AsyncWorker(callback) {
+    tsfn = Napi::ThreadSafeFunction::New(env, callback, "ExampleTSFN", 0, 1);
+  }
+
+  void Execute() override {
+    // Long computation or blocking work here
+    int result = 42;
+
+    // Use tsfn to send updates to JS
+    tsfn.BlockingCall(&result, [](Napi::Env env, Napi::Function jsCallback, int* value) {
+      jsCallback.Call({Napi::Number::New(env, *value)});
+    });
+  }
+
+  void OnOK() override {
+    tsfn.Release(); // cleanup
+  }
+};
+
+Napi::Value StartExample(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::Function callback = info[0].As<Napi::Function>();
+
+  ExampleWorker* worker = new ExampleWorker(callback, env);
+  worker->Queue();
+  return env.Undefined();
+}
+```
+
+This example shows how to integrate a `ThreadSafeFunction` within an `AsyncWorker` to communicate asynchronously with JavaScript.
+
+---
+
+# End of Guide
+
+---
