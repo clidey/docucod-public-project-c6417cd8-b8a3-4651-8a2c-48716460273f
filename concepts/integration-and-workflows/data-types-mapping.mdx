@@ -1,0 +1,200 @@
+---
+title: "JavaScript and C++ Type Mapping"
+description: "Survey how standard JavaScript types (String, Number, Buffer, ArrayBuffer, BigInt, etc.) are represented and accessed in C++. Learn how to move data fluidly between your addon and JS code."
+---
+
+# JavaScript and C++ Type Mapping
+
+Node.js native addons often require seamless data exchange between JavaScript and C++ contexts. The `node-addon-api` module provides C++ wrapper classes that map standard JavaScript types such as `String`, `Number`, `Buffer`, `ArrayBuffer`, `BigInt`, and more, enabling fluid and type-safe interactions. This guide surveys how these common JavaScript types are represented in C++ and offers practical insights into moving data back and forth effectively within your addons.
+
+---
+
+## Understanding Type Mapping: Bridging JavaScript and C++
+
+At the heart of efficient native module development lies the ability to confidently convert and access JavaScript values within C++ code, and vice versa. The `node-addon-api` wrappers encapsulate native JavaScript types as C++ objects, preserving type information and providing expressive interfaces.
+
+Common JavaScript primitives and objects have corresponding C++ wrapper classes:
+
+- **Strings** ↔ `Napi::String`
+- **Numbers** ↔ `Napi::Number`
+- **Booleans** ↔ `Napi::Boolean`
+- **BigInts** ↔ `Napi::BigInt` (Node-API v6+)
+- **Buffers** ↔ `Napi::Buffer` (Node.js Buffers)
+- **ArrayBuffers** ↔ `Napi::ArrayBuffer`
+- **TypedArrays** ↔ `Napi::TypedArray` and `Napi::TypedArrayOf<T>`
+- **Objects and Arrays** ↔ `Napi::Object` and `Napi::Array`
+
+Understanding how these map and can be manipulated in C++ code empowers you to build performant, clear, and maintainable native addons.
+
+---
+
+## Working with JavaScript Types in C++
+
+This section provides a practical overview of accessing and manipulating standard JavaScript types with the `node-addon-api` C++ classes.
+
+### 1. Accessing Primitives and Basic Types
+
+You can wrap JavaScript primitives coming into native methods as specific `Napi` types:
+
+- Use `info[index].As<Type>()` to cast `Napi::Value` to a concrete wrapper type.
+- Coerce generic `Napi::Value` using `ToBoolean()`, `ToNumber()`, `ToString()`, or `ToObject()`.
+
+Example:
+
+```cpp
+// Access a Boolean JavaScript argument
+bool flag = info[0].As<Napi::Boolean>();
+
+// Coerce a value to a number safely
+Napi::Number num = info[1].ToNumber();
+```
+
+### 2. Handling Strings
+
+Strings can be created and accessed as UTF-8 or UTF-16 encoded:
+
+```cpp
+// Creating a new string in C++
+Napi::String str = Napi::String::New(env, "Hello, world!");
+
+// Extracting UTF-8 value from JavaScript string
+std::string cppStr = str.Utf8Value();
+
+// Or using cast operator
+std::string cppStr2 = static_cast<std::string>(str);
+```
+
+Use the `.From()` template method to automatically convert C++ string types to JS strings.
+
+### 3. Numbers and BigInts
+
+- Use `Napi::Number` for regular JavaScript numbers (double-precision floating point).
+- Use `Napi::BigInt` for JS BigInt values, supported in Node-API v6 and above.
+
+Example:
+
+```cpp
+Napi::Number pi = Napi::Number::New(env, 3.14159);
+
+#if NAPI_VERSION > 5
+Napi::BigInt bigNum = Napi::BigInt::New(env, 9223372036854775807LL);
+#endif
+```
+
+### 4. Buffers and ArrayBuffers
+
+- **Buffers** (`Napi::Buffer<T>`) are Node.js's binary data buffers.
+- **ArrayBuffers** (`Napi::ArrayBuffer`) represent raw memory buffers accessible from JS typed arrays.
+
+Create or access buffers like this:
+
+```cpp
+// Creating a new Buffer
+Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, length);
+
+// Accessing data pointer and length
+uint8_t* data = buffer.Data();
+size_t length = buffer.Length();
+
+// Working with ArrayBuffer
+Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(env, byteLength);
+void* ptr = arrayBuffer.Data();
+```
+
+If your addon needs to manage external data lifetimes, you can attach finalizers to buffers to clean up native memory upon garbage collection.
+
+### 5. Typed Arrays and Views
+
+Typed arrays (`Float32Array`, `Int32Array`, et al.) can be wrapped with `Napi::TypedArray` or the templated class `Napi::TypedArrayOf<T>`:
+
+```cpp
+Napi::Int32Array int32Array = info[0].As<Napi::Int32Array>();
+int32_t* ptr = int32Array.Data();
+size_t length = int32Array.ElementLength();
+```
+
+For working with raw memory and custom offsets, use `Napi::DataView` on top of an `ArrayBuffer`.
+
+### 6. Objects and Arrays
+
+JavaScript objects and arrays are represented respectively by `Napi::Object` and `Napi::Array`:
+
+- Use `As<Object>()` or `As<Array>()` to cast generic values.
+- Access properties by name or index using `Get()`, `Set()`, and operators `[]`.
+
+Example:
+
+```cpp
+Napi::Object obj = info[0].As<Napi::Object>();
+Napi::Value val = obj.Get("propertyName");
+obj.Set("propertyName", Napi::Number::New(env, 42));
+
+Napi::Array arr = info[1].As<Napi::Array>();
+uint32_t length = arr.Length();
+Napi::Value element = arr.Get((uint32_t)0);
+```
+
+You can define properties dynamically using `DefineProperties` and `PropertyDescriptor` to expose complex native APIs.
+
+---
+
+## Practical Example: Creating and Manipulating an Object
+
+Below is an example based on the test code showing creation of an object and setting various typed properties from C++:
+
+```cpp
+Napi::Object CreateObjectUsingMagic(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::Object obj = Napi::Object::New(env);
+
+  obj.Set("cp_false", Napi::Boolean::New(env, false));
+  obj.Set("cp_true", Napi::Boolean::New(env, true));
+  obj.Set("0", Napi::Number::New(env, 0));
+  obj.Set((uint32_t)42, Napi::Number::New(env, 120));
+  obj.Set("foo2", Napi::String::New(env, u"foo"));
+  obj.Set("circular", obj); // self-reference
+
+  return obj;
+}
+```
+
+This function creates a JS object with properties of various types, including a circular reference.
+
+---
+
+## Best Practices and Common Pitfalls
+
+- Always check that `Napi::Value` objects are not empty before use, especially when C++ exceptions are disabled.
+- Use `As<T>()` for safe casting, which verifies the value’s underlying type.
+- Prefer `MaybeUnwrap()` or equivalent helpers to unwrap `Maybe` types when safe.
+- When working with buffers or external memory, attach finalizers to manage resource lifetimes.
+- Define property descriptors carefully to maintain expected behavior in JS bindings.
+- To handle JS exceptions in native code correctly, use node-addon-api’s exception handling semantics.
+
+<Tip>
+When manipulating object properties, consider using `DefineProperties` with `PropertyDescriptor` arrays for efficient bulk definitions.
+</Tip>
+
+---
+
+## Troubleshooting Data Type Interoperability
+
+If you encounter unexpected behavior:
+
+- Verify type checks using `Is<Type>()` methods on `Napi::Value`.
+- Check for empty values before casts.
+- Use `Env().IsExceptionPending()` to detect JS exceptions.
+- Confirm that buffers and arrays have valid data pointers and lengths.
+- When handling BigInts, ensure Node.js and Node-API versions support them.
+
+---
+
+## Additional Resources
+
+- API Reference for [`Napi::Value`](value.md), [`Napi::Object`](object.md), [`Napi::Buffer`](buffer.md), and related classes.
+- Concepts Guide on [Core Concepts & Terminology](overview/architecture-and-concepts/core-concepts-and-terminology).
+- Setup and Build instructions to ensure environment compatibility.
+
+---
+
+Harness the power of native code while preserving seamless and type-safe interop with JavaScript using the rich `node-addon-api` class wrappers. Mastering these mappings is the first step to writing robust, efficient Node.js native addons.
