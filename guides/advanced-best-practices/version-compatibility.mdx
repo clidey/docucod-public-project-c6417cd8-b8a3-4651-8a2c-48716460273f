@@ -1,0 +1,208 @@
+---
+title: "Version Management & Node.js Compatibility"
+description: "Learn how to build addons compatible with multiple Node.js versions using Node-API versioning. Follow guidance on managing dependencies, minimizing breaking changes, and targeting active LTS releases."
+---
+
+# Version Management & Node.js Compatibility
+
+Ensure your native addon works seamlessly across multiple Node.js versions by effectively managing Node-API versions and staying aligned with the supported Node.js LTS releases. This guide walks you through practical version targeting, dependency management, compatibility best practices, and minimizing breaking changes.
+
+---
+
+## 1. Understanding the Importance of Version Management
+
+Native addons built with `node-addon-api` rely on Node-API, which guarantees ABI stability. This means that your addons should work across Node.js versions as long as the targeted Node-API version is supported. Proper version management ensures:
+
+- Smooth compatibility across active Node.js LTS versions
+- Minimized maintenance overhead by avoiding unnecessary rebuilds
+- Reduced runtime errors and user-impacting failures
+
+> The `node-addon-api` package itself supports only active LTS Node.js versions, and the minimum supported Node.js version for the current release is Node.js 18.x.
+
+
+## 2. Pre-Requisites Before Managing Versions
+
+Before diving into version management, confirm that:
+
+- Your development environment is set up with an active LTS Node.js version (18.x or later).
+- `node-addon-api` is added as a dependency in your addon’s `package.json`.
+- Your build system (`node-gyp` or `cmake-js`) is properly configured.
+
+See the [Setup guide](/getting-started/setup-basics/install-instructions) for detailed environment setup.
+
+## 3. Targeting Node-API Versions in Your Addon
+
+Node-API versions correspond to Node.js releases and provide stable ABI guarantees. To maximize compatibility:
+
+### Step 1: Define the Node-API Version
+
+Set the `NAPI_VERSION` variable in your build configuration to target the appropriate ABI.
+
+Example in `common.gypi`:
+```gyp
+{
+  'variables': {
+    'NAPI_VERSION%': "<!\(node -p \"process.env.NAPI_VERSION || process.versions.napi\")",
+  },
+  'conditions': [
+    ['NAPI_VERSION!=""', { 'defines': ['NAPI_VERSION=<@(NAPI_VERSION)'] } ],
+  ],
+}
+```
+
+By default, this uses the Node.js runtime’s default N-API version.
+
+### Step 2: Reflect Version in `binding.gyp`
+
+Reference the `node-addon-api` in your `binding.gyp` targets and define exception-handling preferences:
+
+```gyp
+{
+  'targets': [
+    {
+      'target_name': 'myaddon',
+      'dependencies': [ "<!(node -p \"require('node-addon-api').targets\")" ],
+      'defines': ['NAPI_VERSION=<@(NAPI_VERSION)'],
+      'sources': [ 'addon.cc' ],
+    }
+  ]
+}
+```
+
+This ensures the build is aware of the targeted ABI level.
+
+### Step 3: Manage Optional Exception Handling
+
+Choose whether to enable C++ exceptions in your `node-addon-api` wrapper:
+
+- **No exceptions:** Use `node_addon_api` target.
+- **Catch `Napi::Error` exceptions:** Use `node_addon_api_except`.
+- **Catch all C++ exceptions:** Use `node_addon_api_except_all`.
+
+Set the target in `binding.gyp` accordingly.
+
+### Step 4: Platform-Specific Flags
+
+For macOS, add compiler flags to enhance symbol visibility and avoid build errors:
+
+```gyp
+'conditions': [
+  ['OS=="mac"', {
+    'cflags+': ['-fvisibility=hidden'],
+    'xcode_settings': {
+      'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES'
+    }
+  }]
+]
+```
+
+
+## 4. Ensuring Compatibility with Multiple Node.js Versions
+
+### Best Practices
+
+- Target the minimum Node-API version supported by the oldest Node.js LTS you want to run on.
+- Avoid using newer Node-API features without fallback options or runtime detection.
+- Regularly update your dependencies aligned with the latest active LTS Node.js versions.
+
+### Use Compatibility Badges
+
+Include Node-API badges in your `README.md` to communicate supported ABI versions:
+
+![Node-API v8 Badge](https://github.com/nodejs/abi-stable-node/blob/doc/assets/Node-API%20v8%20Badge.svg)
+
+Refer to the official [Node-API support matrix](https://nodejs.org/dist/latest/docs/api/n-api.html#node-api-version-matrix) for mapping Node-API versions to Node.js versions.
+
+### Runtime Feature Detection
+
+To gracefully handle differences across Node.js versions, you can perform runtime feature detection using the `napi_version` value exposed from `Napi::Env`:
+
+```cpp
+uint32_t napi_version = env.GetVersion();
+if (napi_version >= 4) {
+  // Use features introduced in Node-API version 4
+} else {
+  // Fallback for older Node.js versions
+}
+```
+
+This approach adds robustness and future-proofing to your addon.
+
+## 5. Avoiding Breaking Changes
+
+**Tips to minimize breaking changes when upgrading:**
+
+- Keep deprecated APIs disabled in builds by defining `NODE_ADDON_API_DISABLE_DEPRECATED` if you want to enforce strict API usage.
+
+- Regularly test your addon with new Node.js LTS releases during their release candidates.
+
+- Use prebuilt binaries for distribution to reduce build-time surprises.
+
+- Follow the Node.js and Node-API changelogs closely for upcoming breaking changes.
+
+## 6. Distribution and Prebuild Support
+
+To ease installation for end-users and avoid local compilation issues, consider distributing prebuilt binaries using compatible prebuild tools:
+
+- [node-pre-gyp](https://www.npmjs.com/package/node-pre-gyp)
+- [prebuild](https://www.npmjs.com/package/prebuild)
+- [prebuildify](https://www.npmjs.com/package/prebuildify)
+
+Prebuilds must be compiled against targeted Node-API versions to maintain ABI compatibility.
+
+Refer to the [Prebuild tools guide](doc/prebuild_tools.md) for setup details.
+
+## 7. Summary Workflow: Managing Versions Step-by-Step
+
+<Steps>
+<Step title="Set your environment Node.js version">
+Ensure you are working on an active LTS release (minimum Node.js 18.x).
+</Step>
+<Step title="Define NAPI_VERSION in build config">
+Configure `NAPI_VERSION` in your `common.gypi` or directly inline in `binding.gyp` to target the desired Node-API version.
+</Step>
+<Step title="Declare `node-addon-api` dependencies">
+Reference `node-addon-api` targets with appropriate exception handling in your `binding.gyp` or CMake configuration.
+</Step>
+<Step title="Add platform-specific compiler flags">
+Include necessary flags for macOS or other platforms to avoid visibility or linking issues.
+</Step>
+<Step title="Test across Node.js versions">
+Run your addon on supported Node.js versions, performing runtime feature checks as needed.
+</Step>
+<Step title="Distribute prebuilt binaries (optional)">
+Use prebuild tools to provide compatible binaries and improve install experience.
+</Step>
+</Steps>
+
+## 8. Troubleshooting Version Compatibility Issues
+
+<AccordionGroup title="Common compatibility issues and their resolutions">
+<Accordion title="Addon Fails to Load on Certain Node.js Versions">
+- Verify `NAPI_VERSION` matches the targeted Node.js runtime.
+- Confirm you are not using Node-API features unsupported on older versions.
+- Run `node -p process.versions.napi` to confirm runtime support.
+</Accordion>
+<Accordion title="Build Fails Due to Deprecated API Usage">
+- Define `NODE_ADDON_API_DISABLE_DEPRECATED` in your build.
+- Refactor your code to remove deprecated API calls.
+- Check `common.gypi` for `disable_deprecated` flag usage.
+</Accordion>
+<Accordion title="Symbol Visibility Errors on macOS">
+- Ensure macOS-specific flags (`-fvisibility=hidden` and `GCC_SYMBOLS_PRIVATE_EXTERN`) are set in `binding.gyp` or `common.gypi`.
+</Accordion>
+</AccordionGroup>
+
+<Tip>
+Maintaining ABI and version compatibility requires proactive testing and disciplined version targeting. Automate tests against multiple Node.js LTS versions to catch issues early.
+</Tip>
+
+## 9. Additional Resources
+
+- [Node.js Node-API Version Matrix](https://nodejs.org/dist/latest/docs/api/n-api.html#node-api-version-matrix)
+- [Node-addon-api Setup Guide](doc/setup.md)
+- [Build System Integration Guide](api-reference/integration-build/setup-build.md)
+- [Prebuild Tools Documentation](doc/prebuild_tools.md)
+- [Troubleshooting Setup Issues](getting-started/troubleshooting/troubleshooting-guide.mdx)
+
+---
